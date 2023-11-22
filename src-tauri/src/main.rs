@@ -3,6 +3,7 @@
 
 mod commands;
 mod lexer;
+mod logger;
 mod model;
 
 use std::{
@@ -23,8 +24,8 @@ use model::state::{AppState, CmdState, CommandResponse, Config};
 use ollama_rs::Ollama;
 
 use source_cmd_parser::log_parser::SourceCmdLogParser;
-use tauri::State;
-use tokio::sync::Mutex;
+use tauri::{State, Manager};
+use tokio::sync::{mpsc, Mutex};
 
 lazy_static! {
     static ref CONFIG_FILE: PathBuf = {
@@ -32,6 +33,7 @@ lazy_static! {
         PathBuf::from(home_dir).join(".souce-cmd-gui-config.json")
     };
 }
+
 #[tauri::command]
 async fn is_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, ()> {
     Ok(state.lock().await.running_thread.is_some())
@@ -115,7 +117,6 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
 
     let chat_gpt = ChatGPT::new(api_key).expect("Unable to create GPT Client");
 
-
     let cmd_state = CmdState {
         personality: String::new(),
         chat_gpt,
@@ -176,14 +177,13 @@ async fn update_disabled_commands(
     commands.clear();
     commands.extend(disabled_commands);
 
-
     Ok(())
 }
 
 fn main() {
-    pretty_env_logger::formatted_timed_builder()
-        .filter_level(LevelFilter::Debug)
-        .init();
+    let (tx, mut rx) = mpsc::channel::<String>(100);
+
+    logger::setup_logger(tx);
 
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AppState::default())))
@@ -196,6 +196,16 @@ fn main() {
             update_disabled_commands,
             save_config
         ])
+        .setup(move |app| {
+            let app_handle = app.handle();
+            tauri::async_runtime::spawn(async move {
+                while let Some(message) = rx.recv().await {
+                    app_handle.emit_all("stdout_data", &message).unwrap();
+                }
+            });
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

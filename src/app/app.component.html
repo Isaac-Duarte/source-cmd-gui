@@ -75,7 +75,11 @@
             </div>
 
             <div class="settings-container" *ngIf="isActive('logs')">
-
+                <div class="log-container">
+                    <div class="log" *ngFor="let log of stdoutMessages">
+                        {{log}}
+                    </div>
+                </div>
             </div>
         </div>
 

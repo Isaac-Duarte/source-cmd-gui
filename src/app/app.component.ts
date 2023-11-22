@@ -1,6 +1,7 @@
 import { Component, OnInit } from "@angular/core";
 import { invoke } from "@tauri-apps/api/tauri";
 import { FormsModule } from '@angular/forms';
+import {StdService} from "./std.service";
 
 interface Config {
   file_path: string,
@@ -38,11 +39,14 @@ export class AppComponent implements OnInit {
   };
 
   commands: Command[] = [];
+  stdoutMessages: string[] = [];
 
   isRunning: boolean = false;
   stopping: boolean = false;
   activeTab: 'settings' | 'logs' = 'settings';
   disabledCommands: string[] = [];
+
+  constructor(private stdService: StdService) {}
 
   ngOnInit(): void {
     invoke("get_config").then((res) => {
@@ -56,6 +60,11 @@ export class AppComponent implements OnInit {
     invoke("get_commands").then((res) => {
         this.commands = res as Command[];
     });
+
+    this.stdService.stdoutData$.subscribe((data) => {
+        this.stdoutMessages.push(data);
+    });
+
   }
 
   toogle() {
@@ -67,7 +76,7 @@ export class AppComponent implements OnInit {
       this.isRunning = res as boolean;
 
       if (this.isRunning) {
-        this.stopping = true; 
+        this.stopping = true;
 
         invoke("stop").then((res) => {
           this.isRunning = false;
