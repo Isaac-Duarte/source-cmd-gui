@@ -74,10 +74,13 @@
                 </div>
             </div>
 
-            <div class="settings-container" *ngIf="isActive('logs')">
+            <div class="settings-container" *ngIf="isActive('logs')"  #logContainer>
                 <div class="log-container">
-                    <div class="log" *ngFor="let log of stdoutMessages">
-                        {{log}}
+                    <div *ngFor="let log of stdoutMessages" class="log-entry">
+                        <span class="log-timestamp">{{ log.time_stamp }}</span>
+                        <span [ngClass]="'log-level-' + log.level.toLowerCase()">{{ log.level }}</span>
+                        <span class="log-target">{{ log.target }}</span>
+                        <span class="log-message">{{ log.message }}</span>
                     </div>
                 </div>
             </div>

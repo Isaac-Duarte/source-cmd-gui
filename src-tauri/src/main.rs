@@ -20,6 +20,7 @@ use std::{
 use chatgpt::prelude::ChatGPT;
 use lazy_static::lazy_static;
 use log::{info, LevelFilter};
+use logger::Log;
 use model::state::{AppState, CmdState, CommandResponse, Config};
 use ollama_rs::Ollama;
 
@@ -181,7 +182,7 @@ async fn update_disabled_commands(
 }
 
 fn main() {
-    let (tx, mut rx) = mpsc::channel::<String>(100);
+    let (tx, mut rx) = mpsc::channel::<Log>(100);
 
     logger::setup_logger(tx);
 

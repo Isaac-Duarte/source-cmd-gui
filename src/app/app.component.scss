@@ -221,6 +221,55 @@
   }
 }
 
+.log-container {
+  .log-entry {
+    margin-bottom: 10px;
+    padding: 5px;
+    border-radius: 4px;
+    background-color: #555;
+    font-family: 'Arial', sans-serif;
+  }
+
+  .log-timestamp {
+    color: #888;
+    margin-right: 10px;
+  }
+
+  .log-level-info {
+    color: #017bff;
+    font-weight: bold;
+    margin-right: 10px;
+  }
+
+  .log-level-warn {
+    color: #ffa500;
+    font-weight: bold;
+    margin-right: 10px;
+  }
+
+  .log-level-error {
+    color: #ff4500;
+    font-weight: bold;
+    margin-right: 10px;
+  }
+
+  .log-level-debug {
+    color: #32cd32;
+    font-weight: bold;
+    margin-right: 10px;
+  }
+
+  .log-target {
+    color: #888;
+    margin-right: 10px;
+    font-style: italic;
+  }
+
+  .log-message {
+    color: #f4f4f4;
+  }
+}
+
 .run-status-container {
     display: flex;
     flex-direction: column;
