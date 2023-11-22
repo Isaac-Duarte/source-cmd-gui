@@ -43,7 +43,7 @@ pub async fn explain(
     chat_message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("pong", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("explain", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 
@@ -74,7 +74,7 @@ pub async fn personality(
     chat_message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("pong", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("persionality", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 
@@ -91,7 +91,7 @@ pub async fn llama2(
     message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("pong", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("llama2", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 
@@ -129,7 +129,7 @@ pub async fn eval(
     chat_message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("pong", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("eval", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 

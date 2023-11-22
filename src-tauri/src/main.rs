@@ -114,7 +114,8 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
     let api_key = config.openai_api_key.clone();
 
     let chat_gpt = ChatGPT::new(api_key).expect("Unable to create GPT Client");
-    state.disabled_commands = Some(Arc::new(Mutex::new(vec![])));
+
+
     let cmd_state = CmdState {
         personality: String::new(),
         chat_gpt,
@@ -122,10 +123,8 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
         ollama: Ollama::default(),
         message_context: HashMap::new(),
         user_cooldowns: HashMap::new(),
-        disabled_commands: state.disabled_commands.clone().unwrap(),
+        disabled_commands: state.disabled_commands.clone(),
     };
-
-    state.disabled_commands = Some(Arc::new(Mutex::new(vec![])));
 
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -169,7 +168,14 @@ async fn update_disabled_commands(
     state: State<'_, Arc<Mutex<AppState>>>,
     disabled_commands: Vec<String>,
 ) -> Result<(), ()> {
-    state.lock().await.disabled_commands = Some(Arc::new(Mutex::new(disabled_commands)));
+    info!("Updating disabled commands, {:?}", disabled_commands);
+    let commands = state.lock().await.disabled_commands.clone();
+
+    // We need to mutablly change the commands
+    let mut commands = commands.lock().await;
+    commands.clear();
+    commands.extend(disabled_commands);
+
 
     Ok(())
 }

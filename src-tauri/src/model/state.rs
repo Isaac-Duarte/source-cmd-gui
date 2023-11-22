@@ -18,7 +18,7 @@ pub struct AppState {
     pub stop_flag: Arc<AtomicBool>,
 
     /// This is the id of the command
-    pub disabled_commands: Option<Arc<Mutex<Vec<String>>>>,
+    pub disabled_commands: Arc<Mutex<Vec<String>>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
