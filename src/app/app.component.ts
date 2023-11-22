@@ -59,11 +59,15 @@ export class AppComponent implements OnInit {
   }
 
   toogle() {
+    if (this.stopping) {
+      return;
+    }
+
     invoke("is_running").then((res) => {
       this.isRunning = res as boolean;
 
       if (this.isRunning) {
-        this.stopping = true;
+        this.stopping = true; 
 
         invoke("stop").then((res) => {
           this.isRunning = false;

@@ -227,4 +227,71 @@
     height: 15vh;
     width: 100%;
     gap: 20px;
+
+  .status-label {
+    font-weight: bold;
+    margin-right: 5px;
+  }
+
+  .status-indicator {
+    height: 10px;
+    width: 10px;
+    border-radius: 50%;
+    background-color: red; /* Default to stopped */
+    margin-right: 10px;
+  }
+
+  /* This will be toggled via class binding depending on the status */
+  .status-indicator.running {
+    background-color: green;
+  }
+
+  .start-stop-button {
+    background-color: #414345; /* Button background */
+    border: 1px solid #515556; /* Button border */
+    color: white;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+    font-size: 1rem;
+    transition: background-color 0.3s;
+  }
+
+  .start-stop-button:hover {
+    background-color: #3c3d3e; /* Hover state */
+  }
+
+  .start-stop-icon {
+    margin-right: 5px;
+  }
+
+  /* Tooltip container */
+  .tooltip {
+    position: relative;
+    display: inline-block;
+  }
+
+  /* Tooltip text */
+  .tooltip .tooltiptext {
+    visibility: hidden;
+    width: 120px;
+    background-color: #555;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -60px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+  }
 }

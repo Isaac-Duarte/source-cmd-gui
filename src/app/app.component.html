@@ -83,7 +83,15 @@
 
         <div class="section">
             <div class="run-status-container">
-
+                <div>
+                    <span class="status-label">Status:</span>
+                    <span class="status-indicator" [class.running]="isRunning"></span>
+                    <span>{{ toggleButtonName }}</span>
+                </div>
+                <button class="start-stop-button" (click)="toogle()">
+                    <i class="start-stop-icon" [ngClass]="isRunning ? 'fas fa-stop' : 'fas fa-play'"></i>
+                    {{ toggleButtonName }}
+                </button>
             </div>
         </div>
     </div>
