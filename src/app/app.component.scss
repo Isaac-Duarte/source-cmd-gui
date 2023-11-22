@@ -1,0 +1,172 @@
+.app-container {
+  display: flex;
+  height: 98vh; 
+
+  .sidebar {
+    flex: 0 0 17vh;
+    height: 100%;
+    background: #2b2c2d; 
+    color: white;
+    position: relative;
+
+    
+    border-radius: 8px 8px 8px 8px;
+
+    .menu {
+      .menu-item {
+        padding: 10px;
+        border-radius: 8px 8px 8px 8px;
+        margin: 5px 5px;
+
+        &:hover {
+          background: #3c3d3e; 
+        }
+
+        &.active {
+          background: #414345; // An accent color for the active menu item
+        }
+      }
+    }
+
+    .bottom-of-sidebar {
+      position: absolute;
+      bottom: 0;
+      left: 0; 
+      width: 100%; 
+      margin-bottom: 10px;
+
+      .credits {
+        display: block; 
+        color: #f0f0f0;
+        text-align: center; 
+        font-weight: bold;
+        width: 100%; 
+      }
+    }
+
+    .logo {
+      padding: 15px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .logo:hover {
+      filter: drop-shadow(0 0 2em #24c8db);
+    }
+  }
+
+  .main-content {
+    flex: 1;
+    padding: 0 20px;
+    background: #313334; 
+    color: #f0f0f0; 
+
+    .section {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      background: #2b2c2d; 
+      padding: 10px;
+      border-radius: 8px; 
+
+      .form-group {
+        width: 100%;
+      }
+
+      .input-blur-effect {
+        transition: filter 0.3s; // Smooth transition for the blur effect
+
+        &:not(:focus) {
+          filter: blur(2px); // Apply a blur filter when the input is not focused
+        }
+      }
+
+      input {
+        color: #f0f0f0; 
+        background: #414345; 
+        border: 1px solid #515556; 
+        padding: 10px;
+        margin-right: 10px;
+        border-radius: 4px; 
+
+        
+        &[type="checkbox"] {
+          background: transparent; 
+          border: none; 
+          width: auto; 
+          margin-right: 5px; 
+        }
+
+        
+        &[type="text"], &[type="number"], &[type="password"], &[type="email"], &[type="search"] {
+          width: 100%; 
+          box-sizing: border-box; 
+        }
+
+        
+        &:focus {
+          outline: none; 
+          border-color: #616263; 
+          box-shadow: 0 0 5px rgba(255, 255, 255, 0.2); 
+        }
+      }
+
+      label {
+        display: block; 
+        margin-bottom: 5px; 
+        color: #f0f0f0; 
+      }
+
+      select {
+        width: 100%; 
+        padding: 10px; 
+        border-radius: 4px; 
+        border: 1px solid #515556; 
+        background-color: #414345; 
+        color: #f0f0f0; 
+        appearance: none; 
+        -webkit-appearance: none; 
+        -moz-appearance: none; 
+
+        &:focus {
+          outline: none; 
+          border-color: #616263; 
+          box-shadow: 0 0 5px rgba(255, 255, 255, 0.2); 
+        }
+      }
+
+      
+      select::-ms-expand {
+        display: none; 
+      }
+      select:after {
+        content: '\25BC'; 
+        position: absolute;
+        top: 50%;
+        right: 15px;
+        transform: translateY(-50%);
+        color: #f0f0f0; 
+        pointer-events: none; 
+      }
+
+    }
+  }
+}
+
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  height: 75vh;
+  width: 100%;
+  gap: 20px;
+  
+  overflow-y: auto;
+}
+
+.run-status-container {
+    display: flex;
+    flex-direction: column;
+    height: 15vh;
+    width: 100%;
+    gap: 20px;
+}

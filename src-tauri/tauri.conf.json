@@ -1,0 +1,44 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run start -- --port 1420",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist/source-cmd-gui"
+  },
+  "package": {
+    "productName": "source-cmd-gui",
+    "version": "0.0.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.duarteisaac.dev",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.ico"
+      ]
+    },
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": false,
+        "title": "source-cmd-gui",
+        "width": 600,
+        "height": 700
+      }
+    ]
+  }
+}
