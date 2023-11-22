@@ -16,6 +16,13 @@ enum GameParser {
   CounterStrikeSource = "Counter Strike Source",
 }
 
+interface Command {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+}
+
 @Component({
   selector: "app-root",
   templateUrl: "./app.component.html",
@@ -30,9 +37,12 @@ export class AppComponent implements OnInit {
     openai_api_key: '',
   };
 
+  commands: Command[] = [];
+
   isRunning: boolean = false;
   stopping: boolean = false;
-  activeTab = 'settings';
+  activeTab: 'settings' | 'logs' = 'settings';
+  disabledCommands: string[] = [];
 
   ngOnInit(): void {
     invoke("get_config").then((res) => {
@@ -41,6 +51,10 @@ export class AppComponent implements OnInit {
 
     invoke("is_running").then((res) => {
       this.isRunning = res as boolean;
+    });
+
+    invoke("get_commands").then((res) => {
+        this.commands = res as Command[];
     });
   }
 
@@ -78,4 +92,32 @@ export class AppComponent implements OnInit {
   isActive(tab: string): boolean {
     return this.activeTab === tab;
   }
+
+  changeTab(logs: 'settings' | 'logs'): void {
+    this.activeTab = logs;
+  }
+
+  updateConfig(): void {
+    invoke("save_config", { config: this.config }).then((res) => {
+      console.log('updated config');
+    });
+  }
+
+  updateCommandState(command: Command): void {
+    if (this.disabledCommands.includes(command.id)) {
+      if (command.enabled) {
+        this.disabledCommands = this.disabledCommands.filter((cmd) => cmd !== command.id);
+      }
+    } else {
+      if (!command.enabled) {
+        this.disabledCommands.push(command.id);
+      }
+    }
+
+    invoke("update_disabled_commands", { disabledCommands: this.disabledCommands }).then((res) => {
+      console.log('updated command state');
+    });
+  }
+
+
 }

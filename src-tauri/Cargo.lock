@@ -3125,6 +3125,7 @@ name = "source-cmd-gui"
 version = "0.0.0"
 dependencies = [
  "chatgpt_rs",
+ "lazy_static",
  "log",
  "meval",
  "ollama-rs",

@@ -40,7 +40,8 @@
         color: #f0f0f0;
         text-align: center; 
         font-weight: bold;
-        width: 100%; 
+        width: 100%;
+        font-size: 1rem;
       }
     }
 
@@ -65,9 +66,13 @@
       display: flex;
       align-items: center;
       margin-bottom: 10px;
-      background: #2b2c2d; 
+      background: #2b2c2d;
       padding: 10px;
-      border-radius: 8px; 
+      border-radius: 8px;
+
+        > * {
+            padding-right: 10px;
+        }
 
       .form-group {
         width: 100%;
@@ -93,8 +98,8 @@
         &[type="checkbox"] {
           background: transparent; 
           border: none; 
-          width: auto; 
-          margin-right: 5px; 
+          width: auto;
+          margin-right: 5px;
         }
 
         
@@ -149,6 +154,40 @@
         pointer-events: none; 
       }
 
+      .commands-table {
+        width: 100%;
+        border-collapse: collapse; // Ensures no double borders
+
+        th, td {
+          text-align: left;
+          padding: 8px; // Adjust padding as needed
+          color: #f0f0f0; // Light color text for contrast on dark backgrounds
+        }
+
+        th {
+          background-color: #414345; // Darker header background color
+        }
+
+        td {
+          background-color: #313334; // Darker cell background color
+          border-top: 1px solid #515556; // Border color that fits the dark theme
+        }
+
+        tr:nth-child(odd) {
+          background-color: #2b2c2d; // Slightly different shade for zebra striping
+        }
+
+        th:first-child, td:first-child {
+          width: 50px; // Set a smaller width for the 'Enabled' column
+          text-align: center; // Center the content for aesthetics
+        }
+
+        input[type="checkbox"] {
+          margin: auto; // Center the checkbox
+          display: block;
+        }
+      }
+
     }
   }
 }
@@ -159,8 +198,27 @@
   height: 75vh;
   width: 100%;
   gap: 20px;
-  
-  overflow-y: auto;
+
+  overflow-x: hidden; // No horizontal scrollbar
+  overflow-y: auto; // Vertical scrollbar if needed
+
+  &::-webkit-scrollbar {
+    width: 10px; // Width of the scrollbar
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1; // Color of the track
+    border-radius: 10px; // Rounded corners for the track
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #888; // Color of the scrollbar thumb
+    border-radius: 10px; // Rounded corners for the thumb
+
+    &:hover {
+      background: #555; // Color of the thumb on hover
+    }
+  }
 }
 
 .run-status-container {

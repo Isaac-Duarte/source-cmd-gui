@@ -23,6 +23,7 @@ log = "0.4.20"
 chatgpt_rs = "1.2.3"
 ollama-rs = { version = "0.1.2", features = ["stream"] }
 meval = "0.2.0"
+lazy_static = "1.4.0"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
 mod lexer;
 mod model;
 
@@ -12,31 +13,25 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
-use chatgpt::{
-    prelude::{ChatGPT, Conversation},
-    types::CompletionResponse,
-};
-use log::{info, warn, LevelFilter};
-use model::state::{AppState, CmdState, Config};
-use ollama_rs::{
-    generation::completion::{request::GenerationRequest, GenerationContext},
-    Ollama,
-};
-use serde::{Deserialize, Serialize};
-use source_cmd_parser::{
-    log_parser::{SouceError, SourceCmdLogParser},
-    model::{ChatMessage, ChatResponse},
-};
+use chatgpt::prelude::ChatGPT;
+use lazy_static::lazy_static;
+use log::{info, LevelFilter};
+use model::state::{AppState, CmdState, CommandResponse, Config};
+use ollama_rs::Ollama;
+
+use source_cmd_parser::log_parser::SourceCmdLogParser;
 use tauri::State;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
-use crate::model::state::UserCooldown;
-
-const CONFIG_FILE: &str = "config.json";
-
+lazy_static! {
+    static ref CONFIG_FILE: PathBuf = {
+        let home_dir = env::var("HOME").expect("HOME not found");
+        PathBuf::from(home_dir).join(".souce-cmd-gui-config.json")
+    };
+}
 #[tauri::command]
 async fn is_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, ()> {
     Ok(state.lock().await.running_thread.is_some())
@@ -45,7 +40,7 @@ async fn is_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, ()> 
 #[tauri::command]
 async fn get_config(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Config, ()> {
     // Load config from file
-    if let Ok(config_json) = tokio::fs::read_to_string(CONFIG_FILE).await {
+    if let Ok(config_json) = tokio::fs::read_to_string(CONFIG_FILE.clone()).await {
         let config: Config = serde_json::from_str(&config_json).unwrap();
         state.lock().await.config = config.clone();
     }
@@ -53,22 +48,61 @@ async fn get_config(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Config, ()
     Ok(state.lock().await.config.clone())
 }
 
-async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) {
+#[tauri::command]
+async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result<(), ()> {
     state.lock().await.config = config;
 
     // Save config to file as json
     let config_json = serde_json::to_string(&state.lock().await.config).unwrap();
 
-    tokio::fs::write(CONFIG_FILE, config_json)
+    tokio::fs::write(CONFIG_FILE.clone(), config_json)
         .await
         .expect("Failed to save config to file");
+
+    info!("Saved config to file");
+
+    Ok(())
+}
+
+/// TODO: Pull this from the parser directly
+#[tauri::command]
+fn get_commands() -> Vec<CommandResponse> {
+    vec![
+        CommandResponse {
+            enabled: true,
+            id: String::from("ping"),
+            name: String::from("Ping"),
+            description: String::from("Pong!"),
+        },
+        CommandResponse {
+            enabled: true,
+            id: String::from("explain"),
+            name: String::from("Explain"),
+            description: String::from("Explain something to the AI"),
+        },
+        CommandResponse {
+            enabled: true,
+            id: String::from("personality"),
+            name: String::from("Personality"),
+            description: String::from("Set the AI's personality"),
+        },
+        CommandResponse {
+            enabled: true,
+            id: String::from("llama2"),
+            name: String::from("Llama2"),
+            description: String::from("Generate a response from Llama2 (Requires OLlama)"),
+        },
+        CommandResponse {
+            enabled: true,
+            id: String::from("eval"),
+            name: String::from("Eval"),
+            description: String::from("Evaluate a math expression"),
+        },
+    ]
 }
 
 #[tauri::command]
 async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result<(), ()> {
-    // Save config to file as json
-    save_config(state.clone(), config.clone()).await;
-
     let mut state = state.lock().await;
     if state.running_thread.is_some() {
         return Err(());
@@ -78,27 +112,33 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
 
     let stop_flag = state.stop_flag.clone();
     let api_key = config.openai_api_key.clone();
-    let handle = std::thread::spawn(move || {
-        let chat_gpt = ChatGPT::new(api_key).expect("Unable to create GPT Client");
 
+    let chat_gpt = ChatGPT::new(api_key).expect("Unable to create GPT Client");
+    state.disabled_commands = Some(Arc::new(Mutex::new(vec![])));
+    let cmd_state = CmdState {
+        personality: String::new(),
+        chat_gpt,
+        conversations: HashMap::new(),
+        ollama: Ollama::default(),
+        message_context: HashMap::new(),
+        user_cooldowns: HashMap::new(),
+        disabled_commands: state.disabled_commands.clone().unwrap(),
+    };
+
+    state.disabled_commands = Some(Arc::new(Mutex::new(vec![])));
+
+    let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
             let mut parser = SourceCmdLogParser::builder()
                 .file_path(Box::new(PathBuf::from(config.file_path)))
-                .state(CmdState {
-                    personality: String::new(),
-                    chat_gpt,
-                    conversations: HashMap::new(),
-                    ollama: Ollama::default(),
-                    message_context: HashMap::new(),
-                    user_cooldowns: HashMap::new(),
-                })
+                .state(cmd_state)
                 .set_parser(config.parser.get_parser())
-                .add_command(".ping", pong)
-                .add_command(".explain", explain)
-                .add_command(".personality", personality)
-                .add_command(".llama2", llama2)
-                .add_global_command(eval)
+                .add_command(".ping", commands::pong)
+                .add_command(".explain", commands::explain)
+                .add_command(".personality", commands::personality)
+                .add_command(".llama2", commands::llama2)
+                .add_global_command(commands::eval)
                 .stop_flag(stop_flag)
                 .time_out(Duration::from_secs(config.command_timeout))
                 .build()
@@ -124,14 +164,14 @@ async fn stop(state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
     Ok(())
 }
 
-async fn pong(
-    chat_message: ChatMessage,
-    _: Arc<RwLock<CmdState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
-    Ok(Some(ChatResponse::new(format!(
-        "PONG {}",
-        chat_message.message
-    ))))
+#[tauri::command]
+async fn update_disabled_commands(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    disabled_commands: Vec<String>,
+) -> Result<(), ()> {
+    state.lock().await.disabled_commands = Some(Arc::new(Mutex::new(disabled_commands)));
+
+    Ok(())
 }
 
 fn main() {
@@ -142,153 +182,14 @@ fn main() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AppState::default())))
         .invoke_handler(tauri::generate_handler![
-            is_running, get_config, start, stop
+            is_running,
+            get_config,
+            start,
+            stop,
+            get_commands,
+            update_disabled_commands,
+            save_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-async fn explain(
-    chat_message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
-    info!("Explain: {}", chat_message.message);
-
-    let mut personality = state.read().await.personality.clone();
-
-    let response: CompletionResponse = state.read().await.chat_gpt
-        .send_message(format!(
-            "Please response in 120 characters or less. Can you response as if you were {}. The prompt is: \"{}\"",
-            personality,
-            chat_message.message
-        ))
-        .await?;
-
-    if !personality.is_empty() {
-        personality = format!(" {}", personality);
-    }
-
-    let mut chat_response = format!("[AI{}]: ", personality);
-
-    chat_response.push_str(response.message_choices[0].message.content.as_str());
-
-    Ok(Some(ChatResponse::new(chat_response)))
-}
-async fn personality(
-    chat_message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
-    let message = chat_message.message;
-
-    let mut state = state.write().await;
-
-    state.personality = message;
-
-    Ok(None)
-}
-
-async fn llama2(
-    message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
-    let mut state = state.write().await;
-
-    let mut request = GenerationRequest::new(
-        "llama2-uncensored:latest".to_string(),
-        format!(
-            "Please keep the response under 120 characters. {} Says \"{}\"",
-            message.user_name, message.message
-        ),
-    );
-
-    if let Some(context) = state.message_context.get(&message.user_name) {
-        request = request.context(context.clone());
-    }
-
-    let response = state.ollama.generate(request).await;
-
-    if let Ok(response) = response {
-        state.message_context.insert(
-            message.user_name.clone(),
-            response.final_data.unwrap().context,
-        );
-        Ok(Some(ChatResponse::new(response.response)))
-    } else {
-        Ok(None)
-    }
-}
-
-const COOLDOWN_DURATION: Duration = Duration::from_secs(120); // 2 minutes
-const MESSAGE_LIMIT: usize = 50;
-
-async fn eval(
-    chat_message: ChatMessage,
-    state_lock: Arc<RwLock<CmdState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
-    let message = chat_message.raw_message;
-
-    if message.trim().parse::<f64>().is_ok() {
-        return Ok(None);
-    }
-
-    info!("{} said {} ", chat_message.user_name, message);
-
-    let tokens = lexer::tokenize(message.as_str());
-
-    let expression = lexer::to_string(&tokens);
-
-    if expression.is_empty()
-        || tokens.len() == 1
-        || tokens
-            .iter()
-            .all(|token| token.is_number() || token.is_parathesis())
-    {
-        return Ok(None);
-    }
-
-    info!("Eval: {}", expression);
-
-    match meval::eval_str(&expression.replace('x', "*")) {
-        Ok(response) => {
-            {
-                let mut state = state_lock.write().await;
-
-                let user_cooldown = state
-                    .user_cooldowns
-                    .entry(chat_message.user_name.clone())
-                    .or_insert(UserCooldown {
-                        timestamps: Vec::new(),
-                    });
-
-                // Remove outdated timestamps
-                user_cooldown
-                    .timestamps
-                    .retain(|&timestamp| timestamp.elapsed() < COOLDOWN_DURATION);
-
-                // Check cooldown status
-                if user_cooldown.timestamps.len() >= MESSAGE_LIMIT {
-                    warn!(
-                        "Skipping eval. User {} has reached the message limit of {}. Time left till cooldown: {:?}",
-                        chat_message.user_name, MESSAGE_LIMIT,
-                        COOLDOWN_DURATION - user_cooldown.timestamps[0].elapsed());
-
-                    return Ok(None);
-                }
-
-                // If not in cooldown, add the new timestamp
-                user_cooldown.timestamps.push(Instant::now());
-            }
-
-            if message.contains("[Store]") {
-                return Ok(Some(ChatResponse::new(format!(
-                    "The answer is:  {}",
-                    response
-                ))));
-            }
-
-            info!("Eval: {} = {}", message, response);
-            Ok(Some(ChatResponse::new(response.to_string())))
-        }
-        Err(_) => Ok(None),
-    }
 }

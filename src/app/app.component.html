@@ -5,8 +5,8 @@
         </div>
 
         <div class="menu">
-            <div class="menu-item" [ngClass]="isActive('settings') ? 'active' : ''">Settings</div>
-            <div class="menu-item" [ngClass]="isActive('logs') ? 'active' : ''">Log</div>
+            <div class="menu-item" (click)="changeTab('settings')" [ngClass]="isActive('settings') ? 'active' : ''">Settings</div>
+            <div class="menu-item" (click)="changeTab('logs')" [ngClass]="isActive('logs') ? 'active' : ''">Log</div>
         </div>
 
         <div class="bottom-of-sidebar">
@@ -24,33 +24,62 @@
             <div class="settings-container" *ngIf="isActive('settings')">
                 <div class="form-group">
                     <label for="file-path">File Path</label>
-                    <input type="text" id="file-path" [(ngModel)]="config.file_path">
+                    <input (change)="updateConfig()" type="text" id="file-path" [(ngModel)]="config.file_path">
                 </div>
 
                 <div class="form-group">
-                    <label for="command-timeout">Command Timeout (Seconds):</label>
-                    <input type="number" id="command-timeout" [(ngModel)]="config.command_timeout">
+                    <label for="command-timeout">Command Timeout (Seconds)</label>
+                    <input (change)="updateConfig()" type="number" id="command-timeout" [(ngModel)]="config.command_timeout">
                 </div>
 
                 <div class="form-group">
-                    <label for="openapi-api-key">OpenAI API Key:</label>
-                    <input type="text" id="openapi-api-key" class="input-blur-effect" [(ngModel)]="config.openai_api_key">
+                    <label for="openapi-api-key">OpenAI API Key</label>
+                    <input (change)="updateConfig()" type="text" id="openapi-api-key" class="input-blur-effect"
+                           [(ngModel)]="config.openai_api_key">
                 </div>
 
                 <div class="form-group">
-                    <label for="owner">Your Username:</label>
-                    <input type="text" id="owner" [(ngModel)]="config.owner">
+                    <label for="owner">Your Username</label>
+                    <input (change)="updateConfig()" type="text" id="owner" [(ngModel)]="config.owner">
                 </div>
 
                 <div class="form-group">
-                    <label for="game-selector">Game Selector:</label>
-                    <select id="game-selector" [(ngModel)]="config.parser">
+                    <label for="game-selector">Game Selector</label>
+                    <select (change)="updateConfig()" id="game-selector" [(ngModel)]="config.parser">
                         <option>Counter Strike Source</option>
                         <option>Counter Strike 2</option>
                     </select>
                 </div>
+
+                <div class="form-group">
+                    <label>Commands</label>
+                    <table class="commands-table">
+                        <thead>
+                        <tr>
+                            <th>Enabled</th>
+                            <th>Name</th>
+                            <th>Description</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr *ngFor="let command of commands">
+                            <td>
+                                <input (change)="updateCommandState(command)" type="checkbox" [(ngModel)]="command.enabled">
+                            </td>
+                            <td>{{ command.name }}</td>
+                            <td>{{ command.description }}</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="settings-container" *ngIf="isActive('logs')">
+
             </div>
         </div>
+
+
 
         <div class="section">
             <div class="run-status-container">
@@ -58,39 +87,5 @@
             </div>
         </div>
     </div>
-    <!--  <div class="container">-->
-    <!--    <form>-->
-    <!--      <div class="container">-->
-
-    <!--        <div class="form-group">-->
-    <!--          <label for="file-path">File Path:</label>-->
-    <!--          <input type="text" id="file-path" [(ngModel)]="config.file_path" name="filePath">-->
-    <!--        </div>-->
-
-
-    <!--        <div class="form-group">-->
-    <!--          <label for="command-timeout">Command Timeout (Seconds):</label>-->
-    <!--          <input type="number" id="command-timeout" [(ngModel)]="config.command_timeout" name="commandTimeout">-->
-    <!--        </div>-->
-
-    <!--        <div class="form-group">-->
-    <!--          <label for="owner">Owner:</label>-->
-    <!--          <input type="text" id="owner" [(ngModel)]="config.owner" name="owner">-->
-    <!--        </div>-->
-
-    <!--        <div class="form-group">-->
-    <!--          <label for="game-selector">Game Selector:</label>-->
-    <!--          <select id="game-selector" [(ngModel)]="config.parser" name="gameSelector">-->
-    <!--            <option>Counter Strike Source</option>-->
-    <!--            <option>Counter Strike 2</option>-->
-    <!--          </select>-->
-    <!--        </div>-->
-
-    <!--      </div>-->
-
-    <!--      <button (click)="toogle()">{{toggleButtonName}}</button>-->
-
-    <!--    </form>-->
-    <!--  </div>-->
 
 </div>

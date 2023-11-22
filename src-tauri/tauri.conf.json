@@ -34,10 +34,10 @@
     "windows": [
       {
         "fullscreen": false,
-        "resizable": false,
+        "resizable": true,
         "title": "source-cmd-gui",
-        "width": 600,
-        "height": 700
+        "width": 700,
+        "height": 800
       }
     ]
   }
