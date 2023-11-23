@@ -19,7 +19,7 @@ use std::{
 
 use chatgpt::prelude::ChatGPT;
 use lazy_static::lazy_static;
-use log::{info, LevelFilter};
+use log::info;
 use logger::Log;
 use model::state::{AppState, CmdState, CommandResponse, Config};
 use ollama_rs::Ollama;
@@ -31,7 +31,7 @@ use tokio::sync::{mpsc, Mutex};
 lazy_static! {
     static ref CONFIG_FILE: PathBuf = {
         let home_dir = dirs::home_dir().expect("Failed to get home directory");
-        PathBuf::from(home_dir).join(".souce-cmd-gui-config.json")
+        home_dir.join(".souce-cmd-gui-config.json")
     };
 }
 
@@ -40,17 +40,30 @@ async fn is_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, ()> 
     Ok(state.lock().await.running_thread.is_some())
 }
 
-#[tauri::command]
-async fn get_config(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Config, ()> {
-    let mut state = state.lock().await;
+async fn load_or_create_config() -> Config {
+    let config = Config::default();
 
     // Load config from file
     if let Ok(config_json) = tokio::fs::read_to_string(CONFIG_FILE.clone()).await {
         let config: Config = serde_json::from_str(&config_json).unwrap();
-        state.config = config.clone();
-
-        state.disabled_commands = Arc::new(Mutex::new(config.disabled_commands.unwrap_or(vec![])));
+        return config;
     }
+
+    // Save config to file as json
+    let config_json = serde_json::to_string(&config).unwrap();
+
+    tokio::fs::write(CONFIG_FILE.clone(), config_json)
+        .await
+        .expect("Failed to save config to file");
+
+    info!("Saved config to file");
+
+    config
+}
+
+#[tauri::command]
+async fn get_config(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Config, ()> {
+    let state = state.lock().await;
 
     Ok(state.config.clone())
 }
@@ -83,34 +96,36 @@ fn get_commands() -> Vec<CommandResponse> {
 
 #[tauri::command]
 async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result<(), ()> {
+    let cloned_app_state = state.clone().inner().clone();
     let mut state = state.lock().await;
+
     if state.running_thread.is_some() {
         return Err(());
     }
 
-    state.stop_flag = Arc::new(AtomicBool::new(false));
+    state.stop_flag = Arc::<AtomicBool>::default();
 
-    let stop_flag = state.stop_flag.clone();
     let api_key = config.openai_api_key.clone();
-
-    let chat_gpt = ChatGPT::new(api_key).expect("Unable to create GPT Client");
 
     let cmd_state = CmdState {
         personality: String::new(),
-        chat_gpt,
+        chat_gpt: ChatGPT::new(api_key).ok(),
         conversations: HashMap::new(),
         ollama: Ollama::default(),
         message_context: HashMap::new(),
         user_cooldowns: HashMap::new(),
-        disabled_commands: state.disabled_commands.clone(),
     };
+
+    state.cmd_state = cmd_state;
+
+    let stop_flag = state.stop_flag.clone();
 
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
             let mut builder = SourceCmdLogParser::builder()
                 .file_path(Box::new(PathBuf::from(config.file_path)))
-                .state(cmd_state)
+                .state(cloned_app_state)
                 .set_parser(config.parser.get_parser())
                 .stop_flag(stop_flag)
                 .time_out(Duration::from_secs(config.command_timeout));
@@ -122,10 +137,13 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
                         command.command.call(msg, state)
                     });
                 } else {
-                    builder = builder.add_command( &format!(".{}", command.name.to_lowercase()), move |msg, state| {
-                        // Call the function in the trait object
-                        command.command.call(msg, state)
-                    });
+                    builder = builder.add_command(
+                        &format!("{}", command.id),
+                        move |msg, state| {
+                            // Call the function in the trait object
+                            command.command.call(msg, state)
+                        },
+                    );
                 }
             }
 
@@ -151,37 +169,29 @@ async fn stop(state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
     Ok(())
 }
 
-#[tauri::command]
-async fn update_disabled_commands(
-    state: State<'_, Arc<Mutex<AppState>>>,
-    disabled_commands: Vec<String>,
-) -> Result<(), ()> {
-    info!("Updating disabled commands, {:?}", disabled_commands);
-    let state = state.lock().await;
-    let commands = state.disabled_commands.clone();
-
-    // We need to mutablly change the commands
-    let mut commands = commands.lock().await;
-    commands.clear();
-    commands.extend(disabled_commands.clone());
-
-    Ok(())
-}
-
-fn main() {
+#[tokio::main]
+async fn main() {
     let (tx, mut rx) = mpsc::channel::<Log>(100);
 
     logger::setup_logger(tx);
 
+    let config = load_or_create_config().await;
+
+    let app_state = AppState {
+        running_thread: None,
+        config,
+        stop_flag: Arc::<AtomicBool>::default(),
+        cmd_state: CmdState::default(),
+    };
+
     tauri::Builder::default()
-        .manage(Arc::new(Mutex::new(AppState::default())))
+        .manage(Arc::new(Mutex::new(app_state)))
         .invoke_handler(tauri::generate_handler![
             is_running,
             get_config,
             start,
             stop,
             get_commands,
-            update_disabled_commands,
             save_config
         ])
         .setup(move |app| {

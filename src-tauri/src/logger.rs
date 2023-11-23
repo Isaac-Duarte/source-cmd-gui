@@ -1,5 +1,5 @@
-use log::{Record, Level, Metadata, LevelFilter};
 use chrono::Local;
+use log::{Level, LevelFilter, Metadata, Record};
 use serde::Serialize;
 use std::sync::Mutex;
 use tokio::sync::mpsc;
@@ -34,7 +34,7 @@ impl log::Log for StdoutLogger {
                 target: target.to_string(),
                 message: record.args().to_string(),
             };
-            
+
             println!("{}", message); // Print to console
             let _ = self.sender.lock().unwrap().try_send(log); // Send to channel
         }
@@ -43,7 +43,9 @@ impl log::Log for StdoutLogger {
     fn flush(&self) {}
 }
 pub fn setup_logger(sender: mpsc::Sender<Log>) {
-    let logger = StdoutLogger { sender: Mutex::new(sender) };
+    let logger = StdoutLogger {
+        sender: Mutex::new(sender),
+    };
     log::set_boxed_logger(Box::new(logger))
         .map(|()| log::set_max_level(LevelFilter::Info))
         .unwrap();

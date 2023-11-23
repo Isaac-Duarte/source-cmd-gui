@@ -93,7 +93,7 @@
                 <div>
                     <span class="status-label">Status:</span>
                     <span class="status-indicator" [class.running]="isRunning"></span>
-                    <span>{{ toggleButtonName }}</span>
+                    <span>{{ toggleButtonStatus }}</span>
                 </div>
                 <button class="start-stop-button" (click)="toogle()">
                     <i class="start-stop-icon" [ngClass]="isRunning ? 'fas fa-stop' : 'fas fa-play'"></i>

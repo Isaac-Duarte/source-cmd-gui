@@ -9,7 +9,7 @@ interface Config {
     owner: String,
     parser: GameParser,
     openai_api_key: string,
-    disabled_commands?: string[],
+    disabled_commands: string[],
 }
 
 enum GameParser {
@@ -20,6 +20,7 @@ enum GameParser {
 
 interface Command {
     name: string;
+    id: string;
     description: string;
     enabled: boolean;
 }
@@ -36,7 +37,9 @@ export class AppComponent implements OnInit {
         owner: '',
         parser: GameParser.CounterStrike2,
         openai_api_key: '',
+        disabled_commands: [],
     };
+    
 
     commands: Command[] = [];
     stdoutMessages: Log[] = [];
@@ -45,7 +48,6 @@ export class AppComponent implements OnInit {
     isRunning: boolean = false;
     stopping: boolean = false;
     activeTab: 'settings' | 'logs' = 'settings';
-    disabledCommands: string[] = [];
 
     constructor(private stdService: StdService) {
     }
@@ -56,10 +58,9 @@ export class AppComponent implements OnInit {
 
             invoke("get_config").then((res) => {
                 this.config = res as Config;
-                this.disabledCommands = this.config.disabled_commands || [];
 
                 this.commands.forEach((command) => {
-                    command.enabled = !this.disabledCommands.includes(command.name);
+                    command.enabled = !this.config.disabled_commands?.includes(command.id);
                 });
             });
 
@@ -134,6 +135,18 @@ export class AppComponent implements OnInit {
         return "Start";
     }
 
+    get toggleButtonStatus(): string {
+        if (this.stopping) {
+            return "Stopping";
+        }
+
+        if (this.isRunning) {
+            return "Running";
+        }
+
+        return "Stopped";
+    }
+
     isActive(tab: string): boolean {
         return this.activeTab === tab;
     }
@@ -149,22 +162,20 @@ export class AppComponent implements OnInit {
     }
 
     updateCommandState(command: Command): void {
-        if (this.disabledCommands.includes(command.name)) {
+        let disabled_commands = this.config.disabled_commands || [];
+
+        if (disabled_commands.includes(command.id)) {
             if (command.enabled) {
-                this.disabledCommands = this.disabledCommands.filter((cmd) => cmd !== command.name);
+                disabled_commands = disabled_commands.filter((cmd) => cmd !== command.id);
             }
         } else {
             if (!command.enabled) {
-                this.disabledCommands.push(command.name);
+                disabled_commands.push(command.id);
             }
         }
+        
 
-        this.config.disabled_commands = this.disabledCommands;
-
-        invoke("update_disabled_commands", { disabledCommands: this.disabledCommands }).then((res) => {
-            console.log('updated command state');
-        });
-
+        this.config.disabled_commands = disabled_commands;
         this.updateConfig();
     }
 
