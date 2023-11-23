@@ -25,7 +25,7 @@ use model::state::{AppState, CmdState, CommandResponse, Config};
 use ollama_rs::Ollama;
 
 use source_cmd_parser::log_parser::SourceCmdLogParser;
-use tauri::{State, Manager};
+use tauri::{Manager, State};
 use tokio::sync::{mpsc, Mutex};
 
 lazy_static! {
@@ -42,21 +42,27 @@ async fn is_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, ()> 
 
 #[tauri::command]
 async fn get_config(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Config, ()> {
+    let mut state = state.lock().await;
+
     // Load config from file
     if let Ok(config_json) = tokio::fs::read_to_string(CONFIG_FILE.clone()).await {
         let config: Config = serde_json::from_str(&config_json).unwrap();
-        state.lock().await.config = config.clone();
+        state.config = config.clone();
+
+        state.disabled_commands = Arc::new(Mutex::new(config.disabled_commands.unwrap_or(vec![])));
     }
 
-    Ok(state.lock().await.config.clone())
+    Ok(state.config.clone())
 }
 
 #[tauri::command]
 async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result<(), ()> {
-    state.lock().await.config = config;
+    let mut state = state.lock().await;
+
+    state.config = config;
 
     // Save config to file as json
-    let config_json = serde_json::to_string(&state.lock().await.config).unwrap();
+    let config_json = serde_json::to_string(&state.config).unwrap();
 
     tokio::fs::write(CONFIG_FILE.clone(), config_json)
         .await
@@ -67,41 +73,12 @@ async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> 
     Ok(())
 }
 
-/// TODO: Pull this from the parser directly
 #[tauri::command]
 fn get_commands() -> Vec<CommandResponse> {
-    vec![
-        CommandResponse {
-            enabled: true,
-            id: String::from("ping"),
-            name: String::from("Ping"),
-            description: String::from("Pong!"),
-        },
-        CommandResponse {
-            enabled: true,
-            id: String::from("explain"),
-            name: String::from("Explain"),
-            description: String::from("Explain something to the AI"),
-        },
-        CommandResponse {
-            enabled: true,
-            id: String::from("personality"),
-            name: String::from("Personality"),
-            description: String::from("Set the AI's personality"),
-        },
-        CommandResponse {
-            enabled: true,
-            id: String::from("llama2"),
-            name: String::from("Llama2"),
-            description: String::from("Generate a response from Llama2 (Requires OLlama)"),
-        },
-        CommandResponse {
-            enabled: true,
-            id: String::from("eval"),
-            name: String::from("Eval"),
-            description: String::from("Evaluate a math expression"),
-        },
-    ]
+    commands::get_commands()
+        .into_iter()
+        .map(|command| command.into())
+        .collect()
 }
 
 #[tauri::command]
@@ -131,19 +108,28 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            let mut parser = SourceCmdLogParser::builder()
+            let mut builder = SourceCmdLogParser::builder()
                 .file_path(Box::new(PathBuf::from(config.file_path)))
                 .state(cmd_state)
                 .set_parser(config.parser.get_parser())
-                .add_command(".ping", commands::pong)
-                .add_command(".explain", commands::explain)
-                .add_command(".personality", commands::personality)
-                .add_command(".llama2", commands::llama2)
-                .add_global_command(commands::eval)
                 .stop_flag(stop_flag)
-                .time_out(Duration::from_secs(config.command_timeout))
-                .build()
-                .expect("Failed to build parser");
+                .time_out(Duration::from_secs(config.command_timeout));
+
+            for command in commands::get_commands() {
+                if command.global_command {
+                    builder = builder.add_global_command(move |msg, state| {
+                        // Call the function in the trait object
+                        command.command.call(msg, state)
+                    });
+                } else {
+                    builder = builder.add_command( &format!(".{}", command.name.to_lowercase()), move |msg, state| {
+                        // Call the function in the trait object
+                        command.command.call(msg, state)
+                    });
+                }
+            }
+
+            let mut parser = builder.build().expect("Failed to build parser");
 
             parser.run().await.unwrap();
         });
@@ -171,12 +157,13 @@ async fn update_disabled_commands(
     disabled_commands: Vec<String>,
 ) -> Result<(), ()> {
     info!("Updating disabled commands, {:?}", disabled_commands);
-    let commands = state.lock().await.disabled_commands.clone();
+    let state = state.lock().await;
+    let commands = state.disabled_commands.clone();
 
     // We need to mutablly change the commands
     let mut commands = commands.lock().await;
     commands.clear();
-    commands.extend(disabled_commands);
+    commands.extend(disabled_commands.clone());
 
     Ok(())
 }

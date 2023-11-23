@@ -7,15 +7,78 @@ use chatgpt::types::CompletionResponse;
 use log::{info, warn};
 use ollama_rs::generation::completion::request::GenerationRequest;
 use source_cmd_parser::{
-    log_parser::SouceError,
+    log_parser::{SouceError, SourceCmdFn},
     model::{ChatMessage, ChatResponse},
 };
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{
     lexer,
-    model::state::{CmdState, UserCooldown},
+    model::state::{CmdState, UserCooldown, CommandResponse},
 };
+pub struct Command<T: Send + Sync + 'static> {
+    pub command:  Box<dyn SourceCmdFn<T> + 'static>,
+    pub name: String,
+    pub description: String,
+    pub global_command: bool,
+}
+
+impl<T: Send + Sync + 'static> Command<T> {
+    fn new(command: Box<dyn SourceCmdFn<T> + 'static>, name: String, description: String, global_command: bool) -> Self {
+        Self {
+            command,
+            name,
+            description,
+            global_command
+        }
+    }
+}
+
+impl From<Command<CmdState>> for CommandResponse {
+    fn from(command: Command<CmdState>) -> Self {
+        Self {
+            enabled: true,
+            name: command.name,
+            description: command.description,
+        }
+    }
+}
+
+pub fn get_commands() -> Vec<Command<CmdState>> {
+    vec![
+        Command::new(Box::new(pong), "Ping".to_string(), "Pong!".to_string(), false),
+        Command::new(
+            Box::new(explain),
+            "Explain".to_string(),
+            "Generates a response from ChatGPT".to_string(),
+            false
+        ),
+        Command::new(
+            Box::new(personality),
+            "Personality".to_string(),
+            "Set the personality for ChatGPT".to_string(),
+            false
+        ),
+        Command::new(
+            Box::new(llama2),
+            "Llama2".to_string(),
+            "Generates a llama2 response (Requires Ollama)".to_string(),
+            false 
+        ),
+        Command::new(
+            Box::new(eval),
+            "Eval".to_string(),
+            "Evaluate a math expression".to_string(),
+            true
+        ),
+        Command::new(
+            Box::new(chat_gpt_respond),
+            "ChatGPT Respond".to_string(),
+            "Generates a response from ChatGPT".to_string(),
+            true
+        ),
+    ]
+}
 
 async fn is_command_disabled(command_id: &str, disabled_commands: Arc<Mutex<Vec<String>>>) -> bool {
     disabled_commands
@@ -29,7 +92,7 @@ pub async fn pong(
     chat_message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("pong", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("Ping", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 
@@ -43,7 +106,7 @@ pub async fn explain(
     chat_message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("explain", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("Explain", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 
@@ -74,7 +137,7 @@ pub async fn personality(
     chat_message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("persionality", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("Persionality", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 
@@ -91,7 +154,7 @@ pub async fn llama2(
     message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("llama2", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("Llama2", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 
@@ -129,7 +192,7 @@ pub async fn eval(
     chat_message: ChatMessage,
     state: Arc<RwLock<CmdState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("eval", state.read().await.disabled_commands.clone()).await {
+    if is_command_disabled("Eval", state.read().await.disabled_commands.clone()).await {
         return Ok(None);
     }
 
@@ -199,4 +262,39 @@ pub async fn eval(
         }
         Err(_) => Ok(None),
     }
+}
+
+async fn chat_gpt_respond(
+    chat_message: ChatMessage,
+    state: Arc<RwLock<CmdState>>,
+) -> Result<Option<ChatResponse>, SouceError> {
+    let message = chat_message.raw_message;
+
+    info!("Chat GPT Respond ({}): {}", chat_message.user_name, message);
+
+    if chat_message.user_name.contains("/home/fozie")
+        || chat_message.message.starts_with('.')
+    {
+        return Ok(None);
+    }
+
+    let mut state = state.write().await;
+
+    let chat_gpt = state.chat_gpt.clone();
+    let conversation = state
+        .conversations
+        .entry(chat_message.user_name.clone())
+        .or_insert_with(|| {
+            chat_gpt.new_conversation_directed(
+                "Respond only in Spanish. Keep the response to 120 chars".to_string(),
+            )
+        });
+
+    let response: CompletionResponse = conversation
+        .send_message(format!("{} says: \"{}\"", chat_message.user_name, message))
+        .await?;
+
+    let chat_response = response.message_choices[0].message.content.clone();
+
+    Ok(Some(ChatResponse::new(chat_response.to_string())))
 }

@@ -1,7 +1,7 @@
-import {Component, ElementRef, OnInit, ViewChild} from "@angular/core";
-import {invoke} from "@tauri-apps/api/tauri";
-import {FormsModule} from '@angular/forms';
-import {Log, StdService} from "./std.service";
+import { Component, ElementRef, OnInit, ViewChild } from "@angular/core";
+import { invoke } from "@tauri-apps/api/tauri";
+import { FormsModule } from '@angular/forms';
+import { Log, StdService } from "./std.service";
 
 interface Config {
     file_path: string,
@@ -9,6 +9,7 @@ interface Config {
     owner: String,
     parser: GameParser,
     openai_api_key: string,
+    disabled_commands?: string[],
 }
 
 enum GameParser {
@@ -18,7 +19,6 @@ enum GameParser {
 }
 
 interface Command {
-    id: string;
     name: string;
     description: string;
     enabled: boolean;
@@ -51,17 +51,25 @@ export class AppComponent implements OnInit {
     }
 
     ngOnInit(): void {
-        invoke("get_config").then((res) => {
-            this.config = res as Config;
+        invoke("get_commands").then((res) => {
+            this.commands = res as Command[];
+
+            invoke("get_config").then((res) => {
+                this.config = res as Config;
+                this.disabledCommands = this.config.disabled_commands || [];
+
+                this.commands.forEach((command) => {
+                    command.enabled = !this.disabledCommands.includes(command.name);
+                });
+            });
+
         });
+
 
         invoke("is_running").then((res) => {
             this.isRunning = res as boolean;
         });
 
-        invoke("get_commands").then((res) => {
-            this.commands = res as Command[];
-        });
 
         this.stdService.stdoutData$.subscribe((data) => {
             if (data.message === '') {
@@ -107,7 +115,7 @@ export class AppComponent implements OnInit {
                     this.stopping = false;
                 });
             } else {
-                invoke("start", {config: this.config}).then((res) => {
+                invoke("start", { config: this.config }).then((res) => {
                     this.isRunning = true;
                 });
             }
@@ -135,25 +143,29 @@ export class AppComponent implements OnInit {
     }
 
     updateConfig(): void {
-        invoke("save_config", {config: this.config}).then((res) => {
+        invoke("save_config", { config: this.config }).then((res) => {
             console.log('updated config');
         });
     }
 
     updateCommandState(command: Command): void {
-        if (this.disabledCommands.includes(command.id)) {
+        if (this.disabledCommands.includes(command.name)) {
             if (command.enabled) {
-                this.disabledCommands = this.disabledCommands.filter((cmd) => cmd !== command.id);
+                this.disabledCommands = this.disabledCommands.filter((cmd) => cmd !== command.name);
             }
         } else {
             if (!command.enabled) {
-                this.disabledCommands.push(command.id);
+                this.disabledCommands.push(command.name);
             }
         }
 
-        invoke("update_disabled_commands", {disabledCommands: this.disabledCommands}).then((res) => {
+        this.config.disabled_commands = this.disabledCommands;
+
+        invoke("update_disabled_commands", { disabledCommands: this.disabledCommands }).then((res) => {
             console.log('updated command state');
         });
+
+        this.updateConfig();
     }
 
 
