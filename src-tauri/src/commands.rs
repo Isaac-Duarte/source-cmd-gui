@@ -10,89 +10,122 @@ use source_cmd_parser::{
     log_parser::{SouceError, SourceCmdFn},
     model::{ChatMessage, ChatResponse},
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 use crate::{
     lexer,
-    model::state::{CmdState, UserCooldown, CommandResponse},
+    model::state::{AppState, CommandResponse, UserCooldown},
 };
-pub struct Command<T: Send + Sync + 'static> {
-    pub command:  Box<dyn SourceCmdFn<T> + 'static>,
+pub struct Command<T: Unpin + Clone + Send + Sync + 'static> {
+    pub command: Box<dyn SourceCmdFn<T> + 'static>,
     pub name: String,
+    pub id: String,
     pub description: String,
     pub global_command: bool,
 }
 
-impl<T: Send + Sync + 'static> Command<T> {
-    fn new(command: Box<dyn SourceCmdFn<T> + 'static>, name: String, description: String, global_command: bool) -> Self {
+impl<T: Unpin + Clone + Send + Sync + 'static> Command<T> {
+    fn new(
+        command: Box<dyn SourceCmdFn<T> + 'static>,
+        name: String,
+        id: String,
+        description: String,
+        global_command: bool,
+    ) -> Self {
         Self {
             command,
             name,
+            id,
             description,
-            global_command
+            global_command,
         }
     }
 }
 
-impl From<Command<CmdState>> for CommandResponse {
-    fn from(command: Command<CmdState>) -> Self {
+impl From<Command<Arc<Mutex<AppState>>>> for CommandResponse {
+    fn from(command: Command<Arc<Mutex<AppState>>>) -> Self {
         Self {
             enabled: true,
             name: command.name,
             description: command.description,
+            id: command.id,
         }
     }
 }
 
-pub fn get_commands() -> Vec<Command<CmdState>> {
+async fn can_run_command(command: &str, state: &Arc<Mutex<AppState>>) -> bool {
+    let state = state.lock().await;
+
+    if state
+        .config
+        .disabled_commands
+        .contains(&command.to_string())
+    {
+        return false;
+    }
+
+    true
+}
+
+pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>>> {
     vec![
-        Command::new(Box::new(pong), "Ping".to_string(), "Pong!".to_string(), false),
+        Command::new(
+            Box::new(pong),
+            "Ping".to_string(),
+            ".ping".to_string(),
+            "Pong!".to_string(),
+            false,
+        ),
         Command::new(
             Box::new(explain),
             "Explain".to_string(),
+            ".explain".to_string(),
             "Generates a response from ChatGPT".to_string(),
-            false
+            false,
         ),
         Command::new(
             Box::new(personality),
             "Personality".to_string(),
+            ".personality".to_string(),
             "Set the personality for ChatGPT".to_string(),
-            false
+            false,
         ),
         Command::new(
             Box::new(llama2),
             "Llama2".to_string(),
+            ".llama2".to_string(),
             "Generates a llama2 response (Requires Ollama)".to_string(),
-            false 
+            false,
         ),
         Command::new(
             Box::new(eval),
             "Eval".to_string(),
+            "eval".to_string(),
             "Evaluate a math expression".to_string(),
-            true
+            true,
         ),
         Command::new(
             Box::new(chat_gpt_respond),
             "ChatGPT Respond".to_string(),
+            "chatgpt".to_string(),
             "Generates a response from ChatGPT".to_string(),
-            true
+            true,
+        ),
+        Command::new(
+            Box::new(logger),
+            "Logger".to_string(),
+            "logger".to_string(),
+            "Logs names into console".to_string(),
+            true,
         ),
     ]
 }
 
-async fn is_command_disabled(command_id: &str, disabled_commands: Arc<Mutex<Vec<String>>>) -> bool {
-    disabled_commands
-        .lock()
-        .await
-        .iter()
-        .any(|command| command == command_id)
-}
-
 pub async fn pong(
     chat_message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
+    state: Arc<Mutex<AppState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("Ping", state.read().await.disabled_commands.clone()).await {
+    if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
 
@@ -104,17 +137,19 @@ pub async fn pong(
 
 pub async fn explain(
     chat_message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
+    state: Arc<Mutex<AppState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("Explain", state.read().await.disabled_commands.clone()).await {
+    if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
 
     info!("Explain: {}", chat_message.message);
+    let state = state.lock().await;
 
-    let mut personality = state.read().await.personality.clone();
+    if let Some(chat_gpt) = state.cmd_state.chat_gpt.as_ref() {
+        let mut personality = state.cmd_state.personality.clone();
 
-    let response: CompletionResponse = state.read().await.chat_gpt
+        let response: CompletionResponse = chat_gpt
         .send_message(format!(
             "Please response in 120 characters or less. Can you response as if you were {}. The prompt is: \"{}\"",
             personality,
@@ -122,61 +157,64 @@ pub async fn explain(
         ))
         .await?;
 
-    if !personality.is_empty() {
-        personality = format!(" {}", personality);
+        if !personality.is_empty() {
+            personality = format!(" {}", personality);
+        }
+
+        let mut chat_response = format!("[AI{}]: ", personality);
+
+        chat_response.push_str(response.message_choices[0].message.content.as_str());
+
+        Ok(Some(ChatResponse::new(chat_response)))
+    } else {
+        Ok(None)
     }
-
-    let mut chat_response = format!("[AI{}]: ", personality);
-
-    chat_response.push_str(response.message_choices[0].message.content.as_str());
-
-    Ok(Some(ChatResponse::new(chat_response)))
 }
 
 pub async fn personality(
     chat_message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
+    state: Arc<Mutex<AppState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("Persionality", state.read().await.disabled_commands.clone()).await {
+    if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
 
     let message = chat_message.message;
 
-    let mut state = state.write().await;
+    let mut state = state.lock().await;
 
-    state.personality = message;
+    state.cmd_state.personality = message;
 
     Ok(None)
 }
 
 pub async fn llama2(
-    message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
+    chat_message: ChatMessage,
+    state: Arc<Mutex<AppState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("Llama2", state.read().await.disabled_commands.clone()).await {
+    if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
 
-    let mut state = state.write().await;
+    let mut state = state.lock().await;
 
     let mut request = GenerationRequest::new(
         "llama2-uncensored:latest".to_string(),
         format!(
             "Please keep the response under 120 characters. {} Says \"{}\"",
-            message.user_name, message.message
+            chat_message.user_name, chat_message.message
         ),
     );
 
-    if let Some(context) = state.message_context.get(&message.user_name) {
+    if let Some(context) = state.cmd_state.message_context.get(&chat_message.user_name) {
         request = request.context(context.clone());
     }
 
-    let response = state.ollama.generate(request).await;
+    let response = state.cmd_state.ollama.generate(request).await;
 
     if let Ok(response) = response {
-        state.message_context.insert(
-            message.user_name.clone(),
+        state.cmd_state.message_context.insert(
+            chat_message.user_name.clone(),
             response.final_data.unwrap().context,
         );
         Ok(Some(ChatResponse::new(response.response)))
@@ -190,9 +228,9 @@ const MESSAGE_LIMIT: usize = 50;
 
 pub async fn eval(
     chat_message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
+    state: Arc<Mutex<AppState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    if is_command_disabled("Eval", state.read().await.disabled_commands.clone()).await {
+    if !can_run_command("eval", &state).await {
         return Ok(None);
     }
 
@@ -201,8 +239,6 @@ pub async fn eval(
     if message.trim().parse::<f64>().is_ok() {
         return Ok(None);
     }
-
-    info!("{} said {} ", chat_message.user_name, message);
 
     let tokens = lexer::tokenize(message.as_str());
 
@@ -222,9 +258,10 @@ pub async fn eval(
     match meval::eval_str(&expression.replace('x', "*")) {
         Ok(response) => {
             {
-                let mut state = state.write().await;
+                let mut state = state.lock().await;
 
                 let user_cooldown = state
+                    .cmd_state
                     .user_cooldowns
                     .entry(chat_message.user_name.clone())
                     .or_insert(UserCooldown {
@@ -266,35 +303,56 @@ pub async fn eval(
 
 async fn chat_gpt_respond(
     chat_message: ChatMessage,
-    state: Arc<RwLock<CmdState>>,
+    state: Arc<Mutex<AppState>>,
 ) -> Result<Option<ChatResponse>, SouceError> {
-    let message = chat_message.raw_message;
-
-    info!("Chat GPT Respond ({}): {}", chat_message.user_name, message);
-
-    if chat_message.user_name.contains("/home/fozie")
-        || chat_message.message.starts_with('.')
-    {
+    if !can_run_command("chatgpt", &state).await {
         return Ok(None);
     }
 
-    let mut state = state.write().await;
+    let message = chat_message.raw_message;
+    
+  
 
-    let chat_gpt = state.chat_gpt.clone();
-    let conversation = state
-        .conversations
-        .entry(chat_message.user_name.clone())
-        .or_insert_with(|| {
-            chat_gpt.new_conversation_directed(
-                "Respond only in Spanish. Keep the response to 120 chars".to_string(),
-            )
-        });
+    let mut state = state.lock().await;
+    let response_direction = state.config.response_direction.clone();
+    let user_name = &state.config.owner;
 
-    let response: CompletionResponse = conversation
-        .send_message(format!("{} says: \"{}\"", chat_message.user_name, message))
-        .await?;
+    if chat_message.user_name.contains(user_name) || chat_message.message.starts_with('.') {
+        return Ok(None);
+    }
 
-    let chat_response = response.message_choices[0].message.content.clone();
+    if let Some(chat_gpt) = state.cmd_state.chat_gpt.clone() {
+        let conversation = state
+            .cmd_state
+            .conversations
+            .entry(chat_message.user_name.clone())
+            .or_insert_with(|| {
+                chat_gpt.new_conversation_directed(
+                    response_direction,
+                )
+            });
 
-    Ok(Some(ChatResponse::new(chat_response.to_string())))
+        let response: CompletionResponse = conversation
+            .send_message(format!("{} says: \"{}\"", chat_message.user_name, message))
+            .await?;
+
+        let chat_response = response.message_choices[0].message.content.clone();
+
+        Ok(Some(ChatResponse::new(chat_response.to_string())))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn logger(
+    chat_message: ChatMessage,
+    state: Arc<Mutex<AppState>>,
+) -> Result<Option<ChatResponse>, SouceError> {
+    if !can_run_command("logger", &state).await {
+        return Ok(None);
+    }
+
+    info!("{} Said {}", chat_message.user_name, chat_message.message);
+
+    Ok(None)
 }
