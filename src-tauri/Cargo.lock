@@ -3149,7 +3149,7 @@ dependencies = [
 
 [[package]]
 name = "source-cmd-gui"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "chatgpt_rs",
  "chrono",
