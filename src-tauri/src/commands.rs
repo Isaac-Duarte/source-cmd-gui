@@ -71,6 +71,12 @@ pub fn get_commands() -> Vec<Command<CmdState>> {
             "Evaluate a math expression".to_string(),
             true
         ),
+        Command::new(
+            Box::new(chat_gpt_respond),
+            "ChatGPT Respond".to_string(),
+            "Generates a response from ChatGPT".to_string(),
+            true
+        ),
     ]
 }
 
@@ -256,4 +262,39 @@ pub async fn eval(
         }
         Err(_) => Ok(None),
     }
+}
+
+async fn chat_gpt_respond(
+    chat_message: ChatMessage,
+    state: Arc<RwLock<CmdState>>,
+) -> Result<Option<ChatResponse>, SouceError> {
+    let message = chat_message.raw_message;
+
+    info!("Chat GPT Respond ({}): {}", chat_message.user_name, message);
+
+    if chat_message.user_name.contains("/home/fozie")
+        || chat_message.message.starts_with('.')
+    {
+        return Ok(None);
+    }
+
+    let mut state = state.write().await;
+
+    let chat_gpt = state.chat_gpt.clone();
+    let conversation = state
+        .conversations
+        .entry(chat_message.user_name.clone())
+        .or_insert_with(|| {
+            chat_gpt.new_conversation_directed(
+                "Respond only in Spanish. Keep the response to 120 chars".to_string(),
+            )
+        });
+
+    let response: CompletionResponse = conversation
+        .send_message(format!("{} says: \"{}\"", chat_message.user_name, message))
+        .await?;
+
+    let chat_response = response.message_choices[0].message.content.clone();
+
+    Ok(Some(ChatResponse::new(chat_response.to_string())))
 }
