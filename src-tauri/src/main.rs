@@ -30,7 +30,7 @@ use tokio::sync::{mpsc, Mutex};
 
 lazy_static! {
     static ref CONFIG_FILE: PathBuf = {
-        let home_dir = env::var("HOME").expect("HOME not found");
+        let home_dir = dirs::home_dir().expect("Failed to get home directory");
         PathBuf::from(home_dir).join(".souce-cmd-gui-config.json")
     };
 }

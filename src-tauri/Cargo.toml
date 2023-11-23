@@ -25,6 +25,7 @@ ollama-rs = { version = "0.1.2", features = ["stream"] }
 meval = "0.2.0"
 lazy_static = "1.4.0"
 chrono = "0.4.31"
+dirs = "5.0.1"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
