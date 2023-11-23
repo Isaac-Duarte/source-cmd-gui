@@ -45,7 +45,10 @@ async fn load_or_create_config() -> Config {
 
     // Load config from file
     if let Ok(config_json) = tokio::fs::read_to_string(CONFIG_FILE.clone()).await {
-        let config: Config = serde_json::from_str(&config_json).unwrap();
+        if let Ok(config) = serde_json::from_str::<Config>(&config_json) {
+            return config;
+        }
+
         return config;
     }
 
@@ -103,7 +106,7 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
         return Err(());
     }
 
-    state.stop_flag = Arc::<AtomicBool>::default();
+    state.stop_flag.store(false, Ordering::Relaxed);
 
     let api_key = config.openai_api_key.clone();
 

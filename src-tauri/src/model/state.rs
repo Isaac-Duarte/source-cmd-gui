@@ -25,7 +25,24 @@ pub struct Config {
     pub parser: GameParser,
     pub openai_api_key: String,
     pub disabled_commands: Vec<String>,
+    pub response_direction: String,
 }
+
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            file_path: String::from(""),
+            command_timeout: 10,
+            owner: String::from(""),
+            parser: GameParser::CounterStrike2,
+            openai_api_key: String::from(""),
+            disabled_commands: vec![],
+            response_direction: "Keep the response to 120 chars".to_string(),
+        }
+    }
+}
+
 
 #[derive(Default)]
 pub struct CmdState {
@@ -54,19 +71,6 @@ pub struct CommandResponse {
     pub id: String,
     pub name: String,
     pub description: String,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            file_path: String::from(""),
-            command_timeout: 10,
-            owner: String::from(""),
-            parser: GameParser::CounterStrike2,
-            openai_api_key: String::from(""),
-            disabled_commands: vec![],
-        }
-    }
 }
 
 pub struct UserCooldown {

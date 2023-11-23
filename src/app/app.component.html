@@ -52,6 +52,11 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="response-direction">ChatGPT Response Direction</label>
+                    <input (change)="updateConfig()" type="text" id="response-direction" [(ngModel)]="config.response_direction">
+                </div>
+
+                <div class="form-group">
                     <label>Commands</label>
                     <table class="commands-table">
                         <thead>

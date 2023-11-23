@@ -310,12 +310,16 @@ async fn chat_gpt_respond(
     }
 
     let message = chat_message.raw_message;
-
-    if chat_message.user_name.contains("/home/fozie") || chat_message.message.starts_with('.') {
-        return Ok(None);
-    }
+    
+  
 
     let mut state = state.lock().await;
+    let response_direction = state.config.response_direction.clone();
+    let user_name = &state.config.owner;
+
+    if chat_message.user_name.contains(user_name) || chat_message.message.starts_with('.') {
+        return Ok(None);
+    }
 
     if let Some(chat_gpt) = state.cmd_state.chat_gpt.clone() {
         let conversation = state
@@ -324,7 +328,7 @@ async fn chat_gpt_respond(
             .entry(chat_message.user_name.clone())
             .or_insert_with(|| {
                 chat_gpt.new_conversation_directed(
-                    "Respond only in Spanish. Keep the response to 120 chars".to_string(),
+                    response_direction,
                 )
             });
 

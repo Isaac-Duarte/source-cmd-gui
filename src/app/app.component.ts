@@ -10,6 +10,7 @@ interface Config {
     parser: GameParser,
     openai_api_key: string,
     disabled_commands: string[],
+    response_direction: string,
 }
 
 enum GameParser {
@@ -38,6 +39,7 @@ export class AppComponent implements OnInit {
         parser: GameParser.CounterStrike2,
         openai_api_key: '',
         disabled_commands: [],
+        response_direction: '',
     };
     
 
