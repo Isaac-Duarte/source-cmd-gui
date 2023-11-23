@@ -28,6 +28,7 @@ pub struct Config {
     pub owner: String,
     pub parser: GameParser,
     pub openai_api_key: String,
+    pub disabled_commands: Option<Vec<String>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -39,7 +40,6 @@ pub struct Command {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CommandResponse {
     pub enabled: bool,
-    pub id: String,
     pub name: String,
     pub description: String,
 }
@@ -52,6 +52,7 @@ impl Default for Config {
             owner: String::from(""),
             parser: GameParser::CounterStrike2,
             openai_api_key: String::from(""),
+            disabled_commands: Some(vec![]),
         }
     }
 }
