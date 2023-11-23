@@ -122,7 +122,7 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
                         command.command.call(msg, state)
                     });
                 } else {
-                    builder = builder.add_command(&command.name, move |msg, state| {
+                    builder = builder.add_command( &format!(".{}", command.name.to_lowercase()), move |msg, state| {
                         // Call the function in the trait object
                         command.command.call(msg, state)
                     });
