@@ -155,6 +155,7 @@ export class AppComponent implements OnInit {
 
     changeTab(logs: 'settings' | 'logs'): void {
         this.activeTab = logs;
+        this.scrollToBottom();
     }
 
     updateConfig(): void {
