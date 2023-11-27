@@ -108,7 +108,7 @@ pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>>> {
             Box::new(chat_gpt_respond),
             "ChatGPT Respond".to_string(),
             "chatgpt".to_string(),
-            "Generates a response from ChatGPT".to_string(),
+            "Generates a response from ChatGPT for every message sent in chat.".to_string(),
             true,
         ),
         Command::new(
@@ -287,13 +287,6 @@ pub async fn eval(
                 user_cooldown.timestamps.push(Instant::now());
             }
 
-            if message.contains("[Store]") {
-                return Ok(Some(ChatResponse::new(format!(
-                    "The answer is:  {}",
-                    response
-                ))));
-            }
-
             info!("Eval: {} = {}", message, response);
             Ok(Some(ChatResponse::new(response.to_string())))
         }
@@ -352,7 +345,7 @@ async fn logger(
         return Ok(None);
     }
 
-    info!("{} Said {}", chat_message.user_name, chat_message.message);
+    info!("{} said {}", chat_message.user_name, chat_message.raw_message);
 
     Ok(None)
 }

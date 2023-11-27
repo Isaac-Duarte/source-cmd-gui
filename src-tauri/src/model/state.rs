@@ -60,12 +60,6 @@ pub struct CmdState {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Command {
-    pub enabled: bool,
-    pub id: i32,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
 pub struct CommandResponse {
     pub enabled: bool,
     pub id: String,
