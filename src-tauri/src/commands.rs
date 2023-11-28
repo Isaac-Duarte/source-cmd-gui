@@ -410,7 +410,6 @@ async fn handle_python_execution(
     let command = message.split_whitespace().next().unwrap_or_default();
 
     let state = state.lock().await;
-    info!("Command: {}", command);
 
     if let Some(script) = state
         .script_repository
