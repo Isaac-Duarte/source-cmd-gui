@@ -16,7 +16,7 @@ tauri-build = { version = "1.5", features = [] }
 tauri = { version = "1.5", features = ["shell-open"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-source_cmd_parser = { path = "/home/isaac/documents/git/source_cmd_parser/"}
+source_cmd_parser = { git = "https://github.com/Isaac-Duarte/source_cmd_parser.git" }
 tokio = { version = "1.34.0", features = ["full"] }
 pretty_env_logger = "0.5.0"
 log = "0.4.20"

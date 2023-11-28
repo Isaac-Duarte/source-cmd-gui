@@ -49,7 +49,7 @@ export class AppComponent implements OnInit {
 
     isRunning: boolean = false;
     stopping: boolean = false;
-    activeTab: 'settings' | 'logs' | 'python-scripts' = 'python-scripts';
+    activeTab: 'settings' | 'logs' | 'python-scripts' = 'settings';
 
     constructor(private stdService: StdService) {
     }
