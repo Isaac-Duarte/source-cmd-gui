@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use log::error;
 use pyo3::{
     types::{PyDict, PyList, PyString},
@@ -70,19 +72,31 @@ with io.StringIO() as new_stdout, io.StringIO() as new_stderr:
         try:
             exec(code)
         except Exception as e:
-            print(e)
-    output = new_stdout.getvalue() + new_stderr.getvalue()
+            print(e, file=sys.stderr)
+    output = new_stdout.getvalue()
+    error_output = new_stderr.getvalue()
         "#;
 
         py.run(&code, None, Some(locals))?;
 
         let output: String = locals.get_item("output").unwrap().unwrap().extract()?;
+        let error_output: String = locals.get_item("error_output").unwrap().unwrap().extract()?;
+
+        if error_output.len() > 0 {
+            error!("Error running python command: {}", error_output)
+        }
 
         Ok(output)
     });
 
     match result {
-        Ok(output) => Some(ChatResponse::new(output)),
+        Ok(output) => {
+            if message.user_name == config.owner {
+                return Some(ChatResponse::with_delay(output, Duration::from_millis(600)));
+            }
+            
+            Some(ChatResponse::new(output))
+        },
         Err(e) => {
             error!("Error running python command: {}", e);
             None

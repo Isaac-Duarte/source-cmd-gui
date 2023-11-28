@@ -404,6 +404,10 @@ async fn handle_python_execution(
     mut chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
 ) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
+    if !can_run_command("python", &state).await {
+        return Ok(None);
+    }
+    
     let message = chat_message.raw_message.clone();
 
     // Get the first word of the message
