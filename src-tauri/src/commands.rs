@@ -16,6 +16,8 @@ use crate::{
     error::SourceCmdGuiError,
     lexer,
     model::state::{AppState, CommandResponse, UserCooldown},
+    python,
+    repository::ScriptRepository,
 };
 pub struct Command<
     T: Unpin + Clone + Send + Sync + 'static,
@@ -129,6 +131,13 @@ pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>, SourceCmdGuiError>> {
             "Mimic".to_string(),
             "mimic".to_string(),
             "Mimics the message sent".to_string(),
+            true,
+        ),
+        Command::new(
+            Box::new(handle_python_execution),
+            "Python".to_string(),
+            "python".to_string(),
+            "Executes python code, disabling will disable all python commands".to_string(),
             true,
         ),
     ]
@@ -381,4 +390,47 @@ async fn mimic(
     let message = chat_message.raw_message;
 
     Ok(Some(ChatResponse::new(message)))
+}
+
+/// Handles python execution
+///
+/// # Arguments
+/// chat_message - The chat message
+/// state - The app state
+///
+/// # Returns
+/// A chat response if the command was executed
+async fn handle_python_execution(
+    mut chat_message: ChatMessage,
+    state: Arc<Mutex<AppState>>,
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
+    let message = chat_message.raw_message.clone();
+
+    // Get the first word of the message
+    let command = message.split_whitespace().next().unwrap_or_default();
+
+    let state = state.lock().await;
+    info!("Command: {}", command);
+
+    if let Some(script) = state
+        .script_repository
+        .get_script_by_trigger(command)
+        .await
+        .ok()
+        .flatten()
+    {
+        chat_message.command = command.to_string();
+        chat_message.raw_message = chat_message
+            .raw_message
+            .replace(command, "")
+            .trim()
+            .to_string();
+        chat_message.message = message.replace(command, "").trim().to_string();
+
+        let response = python::process_python_command(&script, chat_message, &state.config);
+
+        Ok(response)
+    } else {
+        Ok(None)
+    }
 }

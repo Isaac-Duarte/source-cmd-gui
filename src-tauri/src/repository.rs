@@ -16,6 +16,7 @@ pub trait ScriptRepository {
     async fn update_script(&self, script: &Script) -> SourceCmdGuiResult;
     async fn delete_script(&self, id: i32) -> SourceCmdGuiResult;
     async fn get_scripts(&self) -> SourceCmdGuiResult<Vec<Script>>;
+    async fn get_script_by_trigger(&self, trigger: &str) -> SourceCmdGuiResult<Option<Script>>;
 }
 
 pub struct SqliteRepository {
@@ -142,6 +143,29 @@ impl ScriptRepository for SqliteRepository {
                 }
 
                 Ok(result)
+            })
+            .await
+            .map_err(|e| e.into())
+    }
+
+    async fn get_script_by_trigger(&self, trigger: &str) -> SourceCmdGuiResult<Option<Script>> {
+        let trigger = trigger.to_string();
+        
+        self.conn
+            .call(move |conn| {
+                let mut stmt =
+                    conn.prepare("SELECT id, name, code, trigger FROM scripts WHERE trigger = ?1")?;
+
+                let script = stmt.query_row(params![trigger], |row| {
+                    Ok(Script {
+                        id: Some(row.get(0)?),
+                        name: row.get(1)?,
+                        code: row.get(2)?,
+                        trigger: row.get(3)?,
+                    })
+                })?;
+
+                Ok(Some(script))
             })
             .await
             .map_err(|e| e.into())

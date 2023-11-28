@@ -28,7 +28,7 @@ use logger::Log;
 use model::state::{AppState, CmdState, CommandResponse, Config};
 use ollama_rs::Ollama;
 
-use repository::ScriptRepository;
+use repository::{ScriptRepository, Repository};
 use source_cmd_parser::log_parser::SourceCmdLogParser;
 use tauri::{Manager, State};
 use tokio::sync::{mpsc, Mutex};
@@ -180,14 +180,6 @@ async fn stop(state: State<'_, Arc<Mutex<AppState>>>) -> SourceCmdGuiResult {
     Ok(())
 }
 
-fn create_directory_if_not_exists(path: &str) -> SourceCmdGuiResult {
-    if !PathBuf::from(path).exists() {
-        std::fs::create_dir_all(path)?;
-    }
-
-    Ok(())
-}
-
 #[tauri::command]
 async fn get_scripts(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -204,6 +196,8 @@ async fn add_script(
 ) -> SourceCmdGuiResult<python::Script> {
     let state = state.lock().await;
 
+    info!("Adding script: {:?}", script);
+    
     state.script_repository.add_script(script).await
 }
 
@@ -239,7 +233,10 @@ async fn main() -> SourceCmdGuiResult {
         cmd_state: CmdState::default(),
         script_repository: repository::SqliteRepository::new(&SQLITE_DB_FILE).await?,
     };
-
+    
+    // Setup database tables
+    app_state.script_repository.init().await?;
+    
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(app_state)))
         .invoke_handler(tauri::generate_handler![

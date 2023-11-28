@@ -4,7 +4,7 @@
         <!-- Script Management Sidebar -->
         <div class="sidebar">
             <h2>Python Commands</h2>
-            <button (click)="createNewScript()">Add New Script</button>
+            <button class="dark-button" (click)="createNewScript()">Add New Script</button>
 
             <div class="script-container">
                 <div *ngFor="let script of scripts" class="script-entry"
@@ -18,7 +18,7 @@
 
         <!-- Code Editor Area -->
         <section class="editor">
-            <ngs-code-editor
+            <ngs-code-editor #editor
                     class="code-editor"
                     [theme]="theme"
                     [codeModel]="model"
@@ -32,7 +32,7 @@
         <div class="command-input">
             <label for="name">Name</label>
             <div>
-                <input id="name" type="text" [(ngModel)]="currentScript.name" placeholder="Enter script name"/>
+                <input id="name" type="text" [(ngModel)]="currentScript.name" (change)="saveScript()" placeholder="Enter script name"/>
             </div>
         </div>
 
@@ -40,9 +40,16 @@
             <label for="trigger">Trigger</label>
             <div>
                 <input id="trigger" type="text" [(ngModel)]="currentScript.trigger"
+                       (change)="saveScript()"
                        placeholder="Enter trigger command"/>
             </div>
         </div>
+
+        <div class="command-input-btn-container">
+            <button class="command-input-btn" (click)="saveScript()">Save</button>
+            <button class="command-input-btn btn-delete" (click)="deleteScript()">Delete</button>
+        </div>
+
     </section>
 
 

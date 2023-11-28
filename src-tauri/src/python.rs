@@ -1,11 +1,14 @@
 use log::error;
-use pyo3::{types::PyDict, PyErr, Python};
+use pyo3::{
+    types::{PyDict, PyList, PyString},
+    PyErr, Python,
+};
 use serde::{Deserialize, Serialize};
 use source_cmd_parser::model::{ChatMessage, ChatResponse};
 
 use crate::model::state::Config;
 
-#[derive(Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Script {
     pub id: Option<i64>,
     pub name: String,
@@ -54,25 +57,24 @@ pub fn process_python_command(
         let locals = PyDict::new(py);
 
         locals.set_item("message", message.to_py_dict(py)?)?;
-        locals.set_item("conifg", config.to_py_dict(py)?)?;
+        locals.set_item("config", config.to_py_dict(py)?)?;
         locals.set_item("code", &script.code)?;
+    
+        let code = r#"
+import io
+import sys
 
-        py.run(
-            r#"
-        import io
-        import sys
-        from contextlib import redirect_stdout, redirect_stderr
-        with io.StringIO() as new_stdout, io.StringIO() as new_stderr:
-            with redirect_stdout(new_stdout), redirect_stderr(new_stderr):
-                try:
-                    exec(code)
-                except Exception as e:
-                    print(e)
-            output = new_stdout.getvalue() + new_stderr.getvalue()
-        "#,
-            None,
-            Some(locals),
-        )?;
+from contextlib import redirect_stdout, redirect_stderr
+with io.StringIO() as new_stdout, io.StringIO() as new_stderr:
+    with redirect_stdout(new_stdout), redirect_stderr(new_stderr):
+        try:
+            exec(code)
+        except Exception as e:
+            print(e)
+    output = new_stdout.getvalue() + new_stderr.getvalue()
+        "#;
+
+        py.run(&code, None, Some(locals))?;
 
         let output: String = locals.get_item("output").unwrap().unwrap().extract()?;
 
@@ -87,3 +89,4 @@ pub fn process_python_command(
         }
     }
 }
+

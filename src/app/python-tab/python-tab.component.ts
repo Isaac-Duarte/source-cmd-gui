@@ -1,8 +1,9 @@
-import {Component} from '@angular/core';
+import {Component, OnInit} from '@angular/core';
 import {CodeModel} from "@ngstack/code-editor";
+import { invoke } from '@tauri-apps/api';
 
 interface Script {
-    id: number;
+    id?: number;
     name: string;
     code: string;
     trigger: string;
@@ -13,7 +14,7 @@ interface Script {
     templateUrl: './python-tab.component.html',
     styleUrls: ['./python-tab.component.scss']
 })
-export class PythonTabComponent {
+export class PythonTabComponent implements OnInit {
     theme = 'vs-dark';
 
     model: CodeModel = {
@@ -28,33 +29,69 @@ export class PythonTabComponent {
             enabled: true,
         },
     };
-    scripts: Script[] = this.getScripts();
-    currentScript?: Script = this.scripts[0];
+    scripts: Script[] = []
+    currentScript?: Script;
 
-    getScripts(): Script[] {
-        return [];
+    loadScripts(): void {
+        invoke('get_scripts').then((scripts) => {
+            this.scripts = scripts as Script[];
+
+            if (!this.currentScript) {
+                this.currentScript = this.scripts[0];
+                this.setModelCode(this.currentScript.code);
+            }
+        });
     }
 
     createNewScript(): void {
+        const script: Script = {
+            name: 'New Script',
+            code: '',
+            trigger: '',
+        };
 
+        invoke('add_script', {script: script}).then((res) => {
+            console.log(res);
+            this.loadScripts();
+            this.selectScript(res as Script);
+        });
     }
 
-    selectScript(script: { name: string; code: string }): void {
-
+    selectScript(script: Script): void {
+        this.currentScript = script;
+        this.setModelCode(script.code);
     }
 
-    editScript(script: { name: string; code: string }): void {
-
-    }
-
-    deleteScript(script: { name: string; code: string }): void {
-
+    deleteScript(): void {
+        invoke('delete_script', {id: this.currentScript?.id}).then(() => {
+            this.currentScript = undefined;
+            this.loadScripts();
+        });
     }
 
     onCodeChange(content: string): void {
+        if (this.currentScript) {
+            this.currentScript.code = content;
+        }
     }
 
     saveScript(): void {
+        if (this.currentScript) {
+            this.currentScript.code = this.model.value;
+            invoke('update_script', {script: this.currentScript}).then(() => {
+                this.loadScripts();
+            });
+        }
+    }
 
+    setModelCode(code: string): void {
+        this.model = {
+            ...this.model,
+            value: code,
+        }
+    }
+
+    ngOnInit(): void {
+        this.loadScripts();
     }
 }
