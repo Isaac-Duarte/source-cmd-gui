@@ -1,0 +1,49 @@
+<!-- Main container -->
+<div class="python-tab-container">
+    <div class="main-section">
+        <!-- Script Management Sidebar -->
+        <div class="sidebar">
+            <h2>Python Commands</h2>
+            <button (click)="createNewScript()">Add New Script</button>
+
+            <div class="script-container">
+                <div *ngFor="let script of scripts" class="script-entry"
+                     [ngClass]="currentScript?.id === script.id ? 'script-entry-active' : ''" (click)="selectScript(script)">
+                    <div>{{script.name}}</div>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- Code Editor Area -->
+        <section class="editor">
+            <ngs-code-editor
+                    class="code-editor"
+                    [theme]="theme"
+                    [codeModel]="model"
+                    [options]="options"
+                    (valueChanged)="onCodeChange($event)">
+            </ngs-code-editor>
+        </section>
+    </div>
+
+    <section class="console-area"  *ngIf="currentScript">
+        <div class="command-input">
+            <label for="name">Name</label>
+            <div>
+                <input id="name" type="text" [(ngModel)]="currentScript.name" placeholder="Enter script name"/>
+            </div>
+        </div>
+
+        <div class="command-input">
+            <label for="trigger">Trigger</label>
+            <div>
+                <input id="trigger" type="text" [(ngModel)]="currentScript.trigger"
+                       placeholder="Enter trigger command"/>
+            </div>
+        </div>
+    </section>
+
+
+</div>

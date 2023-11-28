@@ -7,26 +7,32 @@ use chatgpt::types::CompletionResponse;
 use log::{info, warn};
 use ollama_rs::generation::completion::request::GenerationRequest;
 use source_cmd_parser::{
-    log_parser::{SouceError, SourceCmdFn},
+    log_parser::SourceCmdFn,
     model::{ChatMessage, ChatResponse},
 };
 use tokio::sync::Mutex;
 
 use crate::{
+    error::SourceCmdGuiError,
     lexer,
     model::state::{AppState, CommandResponse, UserCooldown},
 };
-pub struct Command<T: Unpin + Clone + Send + Sync + 'static> {
-    pub command: Box<dyn SourceCmdFn<T> + 'static>,
+pub struct Command<
+    T: Unpin + Clone + Send + Sync + 'static,
+    E: std::error::Error + Send + Sync + 'static,
+> {
+    pub command: Box<dyn SourceCmdFn<T, E> + 'static>,
     pub name: String,
     pub id: String,
     pub description: String,
     pub global_command: bool,
 }
 
-impl<T: Unpin + Clone + Send + Sync + 'static> Command<T> {
+impl<T: Unpin + Clone + Send + Sync + 'static, E: std::error::Error + Send + Sync + 'static>
+    Command<T, E>
+{
     fn new(
-        command: Box<dyn SourceCmdFn<T> + 'static>,
+        command: Box<dyn SourceCmdFn<T, E> + 'static>,
         name: String,
         id: String,
         description: String,
@@ -42,8 +48,8 @@ impl<T: Unpin + Clone + Send + Sync + 'static> Command<T> {
     }
 }
 
-impl From<Command<Arc<Mutex<AppState>>>> for CommandResponse {
-    fn from(command: Command<Arc<Mutex<AppState>>>) -> Self {
+impl From<Command<Arc<Mutex<AppState>>, SourceCmdGuiError>> for CommandResponse {
+    fn from(command: Command<Arc<Mutex<AppState>>, SourceCmdGuiError>) -> Self {
         Self {
             enabled: true,
             name: command.name,
@@ -67,7 +73,7 @@ async fn can_run_command(command: &str, state: &Arc<Mutex<AppState>>) -> bool {
     true
 }
 
-pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>>> {
+pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>, SourceCmdGuiError>> {
     vec![
         Command::new(
             Box::new(pong),
@@ -118,13 +124,20 @@ pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>>> {
             "Logs names into console".to_string(),
             true,
         ),
+        Command::new(
+            Box::new(mimic),
+            "Mimic".to_string(),
+            "mimic".to_string(),
+            "Mimics the message sent".to_string(),
+            true,
+        ),
     ]
 }
 
 pub async fn pong(
     chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
     if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
@@ -138,7 +151,7 @@ pub async fn pong(
 pub async fn explain(
     chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
     if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
@@ -174,7 +187,7 @@ pub async fn explain(
 pub async fn personality(
     chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
     if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
@@ -191,7 +204,7 @@ pub async fn personality(
 pub async fn llama2(
     chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
     if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
@@ -229,7 +242,7 @@ const MESSAGE_LIMIT: usize = 50;
 pub async fn eval(
     chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
     if !can_run_command("eval", &state).await {
         return Ok(None);
     }
@@ -297,14 +310,12 @@ pub async fn eval(
 async fn chat_gpt_respond(
     chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
     if !can_run_command("chatgpt", &state).await {
         return Ok(None);
     }
 
     let message = chat_message.raw_message;
-    
-  
 
     let mut state = state.lock().await;
     let response_direction = state.config.response_direction.clone();
@@ -319,11 +330,7 @@ async fn chat_gpt_respond(
             .cmd_state
             .conversations
             .entry(chat_message.user_name.clone())
-            .or_insert_with(|| {
-                chat_gpt.new_conversation_directed(
-                    response_direction,
-                )
-            });
+            .or_insert_with(|| chat_gpt.new_conversation_directed(response_direction));
 
         let response: CompletionResponse = conversation
             .send_message(format!("{} says: \"{}\"", chat_message.user_name, message))
@@ -340,12 +347,38 @@ async fn chat_gpt_respond(
 async fn logger(
     chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SouceError> {
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
     if !can_run_command("logger", &state).await {
         return Ok(None);
     }
 
-    info!("{} said {}", chat_message.user_name, chat_message.raw_message);
+    info!(
+        "{} said {}",
+        chat_message.user_name, chat_message.raw_message
+    );
 
     Ok(None)
+}
+
+async fn mimic(
+    chat_message: ChatMessage,
+    state: Arc<Mutex<AppState>>,
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
+    if !can_run_command("mimic", &state).await {
+        return Ok(None);
+    }
+
+    let owner = {
+        let state = state.lock().await;
+
+        state.config.owner.clone()
+    };
+
+    if chat_message.user_name.contains(&owner) {
+        return Ok(None);
+    }
+
+    let message = chat_message.raw_message;
+
+    Ok(Some(ChatResponse::new(message)))
 }

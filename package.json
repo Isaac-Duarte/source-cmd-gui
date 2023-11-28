@@ -17,6 +17,7 @@
     "@angular/forms": "^15.2.0",
     "@angular/platform-browser": "^15.2.0",
     "@angular/platform-browser-dynamic": "^15.2.0",
+    "@ngstack/code-editor": "^5.1.0",
     "@tauri-apps/api": "^1.5.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",

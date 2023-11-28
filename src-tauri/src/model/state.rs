@@ -8,13 +8,16 @@ use chatgpt::{client::ChatGPT, converse::Conversation};
 use ollama_rs::{generation::completion::GenerationContext, Ollama};
 use serde::{Deserialize, Serialize};
 
+use crate::{error::SourceCmdGuiResult, repository::SqliteRepository};
+
 use super::GameParser;
 
 pub struct AppState {
-    pub running_thread: Option<std::thread::JoinHandle<()>>,
+    pub running_thread: Option<std::thread::JoinHandle<SourceCmdGuiResult>>,
     pub config: Config,
     pub stop_flag: Arc<AtomicBool>,
     pub cmd_state: CmdState,
+    pub script_repository: SqliteRepository,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -27,7 +30,6 @@ pub struct Config {
     pub disabled_commands: Vec<String>,
     pub response_direction: String,
 }
-
 
 impl Default for Config {
     fn default() -> Self {
@@ -42,7 +44,6 @@ impl Default for Config {
         }
     }
 }
-
 
 #[derive(Default)]
 pub struct CmdState {

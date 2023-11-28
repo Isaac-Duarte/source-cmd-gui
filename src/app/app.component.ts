@@ -49,7 +49,7 @@ export class AppComponent implements OnInit {
 
     isRunning: boolean = false;
     stopping: boolean = false;
-    activeTab: 'settings' | 'logs' = 'settings';
+    activeTab: 'settings' | 'logs' | 'python-scripts' = 'settings';
 
     constructor(private stdService: StdService) {
     }
@@ -153,7 +153,7 @@ export class AppComponent implements OnInit {
         return this.activeTab === tab;
     }
 
-    changeTab(logs: 'settings' | 'logs'): void {
+    changeTab(logs: 'settings' | 'logs' | 'python-scripts'): void {
         this.activeTab = logs;
         this.scrollToBottom();
     }
