@@ -6,6 +6,7 @@
 
         <div class="menu">
             <div class="menu-item" (click)="changeTab('settings')" [ngClass]="isActive('settings') ? 'active' : ''">Settings</div>
+            <div class="menu-item" (click)="changeTab('python-scripts')" [ngClass]="isActive('python-scripts') ? 'active' : ''">Python</div>
             <div class="menu-item" (click)="changeTab('logs')" [ngClass]="isActive('logs') ? 'active' : ''">Log</div>
         </div>
 
@@ -88,6 +89,10 @@
                         <span class="log-message">{{ log.message }}</span>
                     </div>
                 </div>
+            </div>
+
+            <div class="settings-container" *ngIf="isActive('python-scripts')">
+                <app-python-tab></app-python-tab>
             </div>
         </div>
 

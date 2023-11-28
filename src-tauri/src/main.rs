@@ -2,9 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod error;
 mod lexer;
 mod logger;
 mod model;
+mod python;
+mod repository;
 
 use std::{
     collections::HashMap,
@@ -18,12 +21,14 @@ use std::{
 };
 
 use chatgpt::prelude::ChatGPT;
+use error::{SourceCmdGuiError, SourceCmdGuiResult};
 use lazy_static::lazy_static;
-use log::info;
+use log::{info, warn};
 use logger::Log;
 use model::state::{AppState, CmdState, CommandResponse, Config};
 use ollama_rs::Ollama;
 
+use repository::{ScriptRepository, Repository};
 use source_cmd_parser::log_parser::SourceCmdLogParser;
 use tauri::{Manager, State};
 use tokio::sync::{mpsc, Mutex};
@@ -33,46 +38,52 @@ lazy_static! {
         let home_dir = dirs::home_dir().expect("Failed to get home directory");
         home_dir.join(".souce-cmd-gui-config.json")
     };
+    static ref SQLITE_DB_FILE: String = {
+        let home_dir = dirs::home_dir().expect("Failed to get home directory");
+        home_dir
+            .join(".souce-cmd-gui-scripts.db")
+            .to_str()
+            .unwrap()
+            .to_string()
+    };
 }
 
 #[tauri::command]
-async fn is_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, ()> {
+async fn is_running(state: State<'_, Arc<Mutex<AppState>>>) -> SourceCmdGuiResult<bool> {
     Ok(state.lock().await.running_thread.is_some())
 }
 
-async fn load_or_create_config() -> Config {
+async fn load_or_create_config() -> SourceCmdGuiResult<Config> {
     let config = Config::default();
 
     // Load config from file
     if let Ok(config_json) = tokio::fs::read_to_string(CONFIG_FILE.clone()).await {
         if let Ok(config) = serde_json::from_str::<Config>(&config_json) {
-            return config;
+            return Ok(config);
         }
 
-        return config;
+        return Ok(config);
     }
 
     // Save config to file as json
     let config_json = serde_json::to_string(&config).unwrap();
 
-    tokio::fs::write(CONFIG_FILE.clone(), config_json)
-        .await
-        .expect("Failed to save config to file");
+    tokio::fs::write(CONFIG_FILE.clone(), config_json).await?;
 
     info!("Saved config to file");
 
-    config
+    Ok(config)
 }
 
 #[tauri::command]
-async fn get_config(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Config, ()> {
+async fn get_config(state: State<'_, Arc<Mutex<AppState>>>) -> SourceCmdGuiResult<Config> {
     let state = state.lock().await;
 
     Ok(state.config.clone())
 }
 
 #[tauri::command]
-async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result<(), ()> {
+async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> SourceCmdGuiResult {
     let mut state = state.lock().await;
 
     state.config = config;
@@ -80,9 +91,7 @@ async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> 
     // Save config to file as json
     let config_json = serde_json::to_string(&state.config).unwrap();
 
-    tokio::fs::write(CONFIG_FILE.clone(), config_json)
-        .await
-        .expect("Failed to save config to file");
+    tokio::fs::write(CONFIG_FILE.clone(), config_json).await?;
 
     info!("Saved config to file");
 
@@ -98,12 +107,12 @@ fn get_commands() -> Vec<CommandResponse> {
 }
 
 #[tauri::command]
-async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result<(), ()> {
+async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> SourceCmdGuiResult {
     let cloned_app_state = state.clone().inner().clone();
     let mut state = state.lock().await;
 
     if state.running_thread.is_some() {
-        return Err(());
+        return Err(SourceCmdGuiError::ProcessAlreadyRunning);
     }
 
     state.stop_flag.store(false, Ordering::Relaxed);
@@ -125,7 +134,7 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
 
     let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
+        let result = rt.block_on(async move {
             let mut builder = SourceCmdLogParser::builder()
                 .file_path(Box::new(PathBuf::from(config.file_path)))
                 .state(cloned_app_state)
@@ -140,20 +149,19 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
                         command.command.call(msg, state)
                     });
                 } else {
-                    builder = builder.add_command(
-                        &format!("{}", command.id),
-                        move |msg, state| {
-                            // Call the function in the trait object
-                            command.command.call(msg, state)
-                        },
-                    );
+                    builder = builder.add_command(&command.id.to_string(), move |msg, state| {
+                        // Call the function in the trait object
+                        command.command.call(msg, state)
+                    });
                 }
             }
 
-            let mut parser = builder.build().expect("Failed to build parser");
+            let mut parser = builder.build()?;
 
-            parser.run().await.unwrap();
+            parser.run().await
         });
+
+        result.map_err(SourceCmdGuiError::SourceCmdParserError)
     });
 
     state.running_thread = Some(handle);
@@ -162,31 +170,73 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Result
 }
 
 #[tauri::command]
-async fn stop(state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+async fn stop(state: State<'_, Arc<Mutex<AppState>>>) -> SourceCmdGuiResult {
     let mut state = state.lock().await;
     if let Some(handle) = state.running_thread.take() {
         state.stop_flag.store(true, Ordering::Relaxed);
-        handle.join().unwrap();
+        handle.join().unwrap()?;
     }
 
     Ok(())
 }
 
+#[tauri::command]
+async fn get_scripts(
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> SourceCmdGuiResult<Vec<python::Script>> {
+    let state = state.lock().await;
+
+    state.script_repository.get_scripts().await
+}
+
+#[tauri::command]
+async fn add_script(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    script: python::Script,
+) -> SourceCmdGuiResult<python::Script> {
+    let state = state.lock().await;
+
+    info!("Adding script: {:?}", script);
+    
+    state.script_repository.add_script(script).await
+}
+
+#[tauri::command]
+async fn delete_script(state: State<'_, Arc<Mutex<AppState>>>, id: i32) -> SourceCmdGuiResult {
+    let state = state.lock().await;
+
+    state.script_repository.delete_script(id).await
+}
+
+#[tauri::command]
+async fn update_script(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    script: python::Script,
+) -> SourceCmdGuiResult {
+    let state = state.lock().await;
+
+    state.script_repository.update_script(&script).await
+}
+
 #[tokio::main]
-async fn main() {
+async fn main() -> SourceCmdGuiResult {
     let (tx, mut rx) = mpsc::channel::<Log>(100);
 
     logger::setup_logger(tx);
 
-    let config = load_or_create_config().await;
+    let config = load_or_create_config().await?;
 
     let app_state = AppState {
         running_thread: None,
         config,
         stop_flag: Arc::<AtomicBool>::default(),
         cmd_state: CmdState::default(),
+        script_repository: repository::SqliteRepository::new(&SQLITE_DB_FILE).await?,
     };
-
+    
+    // Setup database tables
+    app_state.script_repository.init().await?;
+    
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(app_state)))
         .invoke_handler(tauri::generate_handler![
@@ -195,18 +245,28 @@ async fn main() {
             start,
             stop,
             get_commands,
-            save_config
+            save_config,
+            get_scripts,
+            add_script,
+            delete_script,
+            update_script
         ])
         .setup(move |app| {
             let app_handle = app.handle();
             tauri::async_runtime::spawn(async move {
                 while let Some(message) = rx.recv().await {
-                    app_handle.emit_all("stdout_data", &message).unwrap();
+                    match app_handle.emit_all("stdout_data", &message) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            warn!("Failed to send stdout data to frontend");
+                        }
+                    }
                 }
             });
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!())?;
+
+    Ok(())
 }
