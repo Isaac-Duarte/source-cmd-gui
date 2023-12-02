@@ -139,6 +139,7 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Source
                 .file_path(Box::new(PathBuf::from(config.file_path)))
                 .state(cloned_app_state)
                 .set_parser(config.parser.get_parser())
+                .chat_key(config.parser.get_chat_key())
                 .stop_flag(stop_flag)
                 .time_out(Duration::from_secs(config.command_timeout));
 

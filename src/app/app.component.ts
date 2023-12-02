@@ -17,6 +17,7 @@ enum GameParser {
 
     CounterStrike2 = "Counter Strike 2",
     CounterStrikeSource = "Counter Strike Source",
+    Minecraft = "Minecraft",
 }
 
 interface Command {

@@ -7,7 +7,7 @@ use chatgpt::types::CompletionResponse;
 use log::{info, warn};
 use ollama_rs::generation::completion::request::GenerationRequest;
 use source_cmd_parser::{
-    log_parser::SourceCmdFn,
+    log_parser::{SourceCmdFn, ParseLog},
     model::{ChatMessage, ChatResponse},
 };
 use tokio::sync::Mutex;
@@ -435,5 +435,45 @@ async fn handle_python_execution(
         Ok(response)
     } else {
         Ok(None)
+    }
+}
+
+pub struct MinecraftParser {
+    regex: regex::Regex,
+}
+
+impl MinecraftParser {
+    pub fn new() -> Self {
+        Self {
+            regex: regex::Regex::new(r"\[CHAT\].*\] (.+?): (.*)").unwrap(),
+        }
+    }
+}
+
+impl Default for MinecraftParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ParseLog for MinecraftParser {
+    fn parse_command(&self, line: &str) -> Option<ChatMessage> {
+        if let Some(captures) = self.regex.captures(line) {
+            let user_name = captures.get(1).unwrap().as_str().to_string();
+            let message = captures.get(2).unwrap().as_str().to_string();
+            
+            let command = message.split_whitespace().next().unwrap().to_string();
+            let raw_message = message.clone();
+    
+            let message = if message.starts_with(command.as_str()) {
+                message[command.len()..].trim().to_string()
+            } else {
+                message
+            };
+
+            Some(ChatMessage::new(user_name, message, command, raw_message))
+        } else {
+            None
+        }
     }
 }
