@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use log::error;
 use pyo3::{
-    types::{PyDict, PyList, PyString},
+    types::{PyDict, PyList, PyModule, PyString},
     PyErr, Python,
 };
 use serde::{Deserialize, Serialize};
@@ -55,32 +55,39 @@ pub fn process_python_command(
     message: ChatMessage,
     config: &Config,
 ) -> Option<ChatResponse> {
-    let result: Result<String, PyErr> = Python::with_gil(|py| {
+    let result: Result<Option<String>, PyErr> = Python::with_gil(|py| {
         let locals = PyDict::new(py);
 
         locals.set_item("message", message.to_py_dict(py)?)?;
         locals.set_item("config", config.to_py_dict(py)?)?;
-        locals.set_item("code", &script.code)?;
+
+        let code = script.code.to_owned()
+            + r#"
+def _main(locals):
+    import io
+    import sys
     
-        let code = r#"
-import io
-import sys
+    result = None
+    
+    from contextlib import redirect_stdout, redirect_stderr
+    with io.StringIO() as new_stdout, io.StringIO() as new_stderr:
+        with redirect_stdout(new_stdout), redirect_stderr(new_stderr):
+            try:
+                result = main(locals)
+            except Exception as e:
+                print(e, file=sys.stderr)
+        output = new_stdout.getvalue()
+        error_output = new_stderr.getvalue()
 
-from contextlib import redirect_stdout, redirect_stderr
-with io.StringIO() as new_stdout, io.StringIO() as new_stderr:
-    with redirect_stdout(new_stdout), redirect_stderr(new_stderr):
-        try:
-            exec(code)
-        except Exception as e:
-            print(e, file=sys.stderr)
-    output = new_stdout.getvalue()
-    error_output = new_stderr.getvalue()
-        "#;
+    return error_output, result or None
+"#;
 
-        py.run(&code, None, Some(locals))?;
+        let py_module = PyModule::from_code(py, &code, "main.py", "main")?;
+        let main_func = py_module.getattr("_main")?;
+        let reuslt = main_func.call1((locals,))?;
 
-        let output: String = locals.get_item("output").unwrap().unwrap().extract()?;
-        let error_output: String = locals.get_item("error_output").unwrap().unwrap().extract()?;
+        let error_output = reuslt.get_item(0).unwrap().extract::<String>()?;
+        let output = reuslt.get_item(1).unwrap().extract::<Option<String>>()?;
 
         if error_output.len() > 0 {
             error!("Error running python command: {}", error_output)
@@ -91,16 +98,15 @@ with io.StringIO() as new_stdout, io.StringIO() as new_stderr:
 
     match result {
         Ok(output) => {
-            if message.user_name == config.owner {
-                return Some(ChatResponse::with_delay(output, Duration::from_millis(600)));
+            if let Some(output) = output {
+                Some(ChatResponse::new(output))
+            } else {
+                None
             }
-            
-            Some(ChatResponse::new(output))
-        },
+        }
         Err(e) => {
             error!("Error running python command: {}", e);
             None
         }
     }
 }
-

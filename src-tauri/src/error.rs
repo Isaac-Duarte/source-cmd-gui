@@ -24,6 +24,9 @@ pub enum SourceCmdGuiError {
 
     #[error(transparent)]
     TokioRusqlite(#[from] tokio_rusqlite::Error),
+
+    #[error(transparent)]
+    TokioJoinError(#[from] tokio::task::JoinError),
 }
 
 impl SourceCmdGuiError {

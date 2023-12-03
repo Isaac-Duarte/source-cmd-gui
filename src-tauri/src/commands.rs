@@ -430,7 +430,11 @@ async fn handle_python_execution(
             .to_string();
         chat_message.message = message.replace(command, "").trim().to_string();
 
-        let response = python::process_python_command(&script, chat_message, &state.config);
+        let config = state.config.clone();
+
+        let response = tokio::task::spawn_blocking(move || {
+            python::process_python_command(&script, chat_message, &config)
+        }).await?;
 
         Ok(response)
     } else {

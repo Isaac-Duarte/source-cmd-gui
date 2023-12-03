@@ -639,9 +639,9 @@ dependencies = [
 
 [[package]]
 name = "deranged"
-version = "0.3.9"
+version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f32d04922c60427da6f9fef14d042d9edddef64cb9d4ce0d64d0685fbeb1fd3"
+checksum = "8eb30d70a07a3b04884d2677f06bec33509dc67ca60d92949e5535352d3191dc"
 dependencies = [
  "powerfmt",
  "serde",
@@ -3377,7 +3377,7 @@ dependencies = [
 [[package]]
 name = "source_cmd_parser"
 version = "0.1.0"
-source = "git+https://github.com/Isaac-Duarte/source_cmd_parser.git#3dc003827fbfa507acc409d27dfe933aff6b8f60"
+source = "git+https://github.com/Isaac-Duarte/source_cmd_parser.git#d736b2a7bcabbc908e9ab4464ea6e16c1f8fded0"
 dependencies = [
  "async-trait",
  "chrono",
