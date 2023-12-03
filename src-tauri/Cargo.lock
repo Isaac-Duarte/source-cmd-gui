@@ -771,6 +771,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
 
 [[package]]
+name = "either"
+version = "1.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
+
+[[package]]
 name = "embed-resource"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2805,6 +2811,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2ff9a1f06a88b01621b7ae906ef0211290d1c8a168a15542486a8f61c0833b9"
 
 [[package]]
+name = "rayon"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c27db03db7734835b3f53954b534c91069375ce6ccaa2e065441e07d9b6cdb1"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ce3fb6ad83f861aac485e76e1985cd109d9a3713802152be56c3b1f0e0658ed"
+dependencies = [
+ "crossbeam-deque",
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3377,7 +3403,7 @@ dependencies = [
 [[package]]
 name = "source_cmd_parser"
 version = "0.1.0"
-source = "git+https://github.com/Isaac-Duarte/source_cmd_parser.git#d736b2a7bcabbc908e9ab4464ea6e16c1f8fded0"
+source = "git+https://github.com/Isaac-Duarte/source_cmd_parser.git#572853a4d915807e7e01ac6323022b9fbccd3498"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3386,6 +3412,8 @@ dependencies = [
  "futures",
  "log",
  "notify",
+ "num_cpus",
+ "rayon",
  "regex",
  "thiserror",
  "tokio",

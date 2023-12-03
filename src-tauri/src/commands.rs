@@ -7,7 +7,7 @@ use chatgpt::types::CompletionResponse;
 use log::{info, warn};
 use ollama_rs::generation::completion::request::GenerationRequest;
 use source_cmd_parser::{
-    log_parser::{SourceCmdFn, ParseLog},
+    log_parser::{ParseLog, SourceCmdFn},
     model::{ChatMessage, ChatResponse},
 };
 use tokio::sync::Mutex;
@@ -150,6 +150,8 @@ pub async fn pong(
     if !can_run_command(&chat_message.command, &state).await {
         return Ok(None);
     }
+
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
     Ok(Some(ChatResponse::new(format!(
         "PONG {}",
@@ -407,7 +409,7 @@ async fn handle_python_execution(
     if !can_run_command("python", &state).await {
         return Ok(None);
     }
-    
+
     let message = chat_message.raw_message.clone();
 
     // Get the first word of the message
@@ -432,9 +434,7 @@ async fn handle_python_execution(
 
         let config = state.config.clone();
 
-        let response = tokio::task::spawn_blocking(move || {
-            python::process_python_command(&script, chat_message, &config)
-        }).await?;
+        let response = python::process_python_command(&script, chat_message, &config);
 
         Ok(response)
     } else {
@@ -465,10 +465,10 @@ impl ParseLog for MinecraftParser {
         if let Some(captures) = self.regex.captures(line) {
             let user_name = captures.get(1).unwrap().as_str().to_string();
             let message = captures.get(2).unwrap().as_str().to_string();
-            
+
             let command = message.split_whitespace().next().unwrap().to_string();
             let raw_message = message.clone();
-    
+
             let message = if message.starts_with(command.as_str()) {
                 message[command.len()..].trim().to_string()
             } else {

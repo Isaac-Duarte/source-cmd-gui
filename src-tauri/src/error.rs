@@ -27,6 +27,9 @@ pub enum SourceCmdGuiError {
 
     #[error(transparent)]
     TokioJoinError(#[from] tokio::task::JoinError),
+
+    #[error(transparent)]
+    Pyo3Error(#[from] pyo3::PyErr),
 }
 
 impl SourceCmdGuiError {
