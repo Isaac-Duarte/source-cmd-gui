@@ -3403,7 +3403,7 @@ dependencies = [
 [[package]]
 name = "source_cmd_parser"
 version = "0.1.0"
-source = "git+https://github.com/Isaac-Duarte/source_cmd_parser.git#7abfab2f0f2111dc152fefc38260d4e29974c3aa"
+source = "git+https://github.com/Isaac-Duarte/source_cmd_parser.git#96076c389a2be79eaa1c27707d3df9da93170819"
 dependencies = [
  "async-trait",
  "chrono",
