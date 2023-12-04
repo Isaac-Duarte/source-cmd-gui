@@ -120,6 +120,7 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Source
     let api_key = config.openai_api_key.clone();
 
     let cmd_state = CmdState {
+        mimic: None,
         personality: String::new(),
         chat_gpt: ChatGPT::new(api_key).ok(),
         conversations: HashMap::new(),

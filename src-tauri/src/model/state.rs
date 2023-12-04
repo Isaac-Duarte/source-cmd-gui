@@ -47,6 +47,8 @@ impl Default for Config {
 
 #[derive(Default)]
 pub struct CmdState {
+    pub mimic: Option<String>,
+
     // Chat GPT Related
     pub chat_gpt: Option<ChatGPT>,
     pub conversations: HashMap<String, Conversation>,

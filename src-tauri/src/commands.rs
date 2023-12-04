@@ -134,6 +134,13 @@ pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>, SourceCmdGuiError>> {
             true,
         ),
         Command::new(
+            Box::new(mimic_set),
+            "Mimic Set".to_string(),
+            ".mimic".to_string(),
+            "Sets the person to mimic".to_string(),
+            false,
+        ),
+        Command::new(
             Box::new(handle_python_execution),
             "Python".to_string(),
             "python".to_string(),
@@ -389,9 +396,33 @@ async fn mimic(
         return Ok(None);
     }
 
-    let message = chat_message.raw_message;
+    let state = state.lock().await;
 
-    Ok(Some(ChatResponse::new(message)))
+    if let Some(mimic) = &state.cmd_state.mimic {
+        if chat_message.user_name.contains(mimic) {
+            return Ok(Some(ChatResponse::new(format!(
+                "{}",
+                chat_message.raw_message
+            ))));
+        }
+    }
+
+    Ok(None)
+}
+
+async fn mimic_set(
+    chat_message: ChatMessage,
+    state: Arc<Mutex<AppState>>,
+) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
+    let mut state = state.lock().await;
+
+    if !chat_message.user_name.contains(&state.config.owner) {
+        return Ok(None);
+    }
+    
+    state.cmd_state.mimic = Some(chat_message.message);
+    
+    Ok(None)
 }
 
 /// Handles python execution
