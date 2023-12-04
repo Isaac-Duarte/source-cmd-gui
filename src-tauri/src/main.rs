@@ -141,6 +141,7 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Source
                 .set_parser(config.parser.get_parser())
                 .chat_key(config.parser.get_chat_key())
                 .stop_flag(stop_flag)
+                .owner(&config.owner)
                 .time_out(Duration::from_secs(config.command_timeout));
 
             for command in commands::get_commands() {
