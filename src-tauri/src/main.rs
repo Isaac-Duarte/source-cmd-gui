@@ -126,7 +126,6 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Source
         conversations: HashMap::new(),
         ollama: Ollama::default(),
         message_context: HashMap::new(),
-        user_cooldowns: HashMap::new(),
     };
 
     state.cmd_state = cmd_state;

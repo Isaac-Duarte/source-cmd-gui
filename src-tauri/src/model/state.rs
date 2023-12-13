@@ -57,9 +57,6 @@ pub struct CmdState {
     // Ollama related
     pub ollama: Ollama,
     pub message_context: HashMap<String, GenerationContext>,
-
-    // Eval related
-    pub user_cooldowns: HashMap<String, UserCooldown>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -68,8 +65,4 @@ pub struct CommandResponse {
     pub id: String,
     pub name: String,
     pub description: String,
-}
-
-pub struct UserCooldown {
-    pub timestamps: Vec<Instant>,
 }

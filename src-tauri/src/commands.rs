@@ -15,8 +15,8 @@ use tokio::sync::Mutex;
 use crate::{
     error::SourceCmdGuiError,
     lexer,
-    model::state::{AppState, CommandResponse, UserCooldown},
-    python,
+    model::state::{AppState, CommandResponse},
+    python::{self, Script},
     repository::ScriptRepository,
 };
 pub struct Command<
@@ -175,11 +175,14 @@ pub async fn explain(
     }
 
     info!("Explain: {}", chat_message.message);
-    let state = state.lock().await;
+    let (chat_gpt, personality) = {
+        let state = state.lock().await;
 
-    if let Some(chat_gpt) = state.cmd_state.chat_gpt.as_ref() {
-        let mut personality = state.cmd_state.personality.clone();
+        (state.cmd_state.chat_gpt.clone(), state.cmd_state.personality.clone())
+    };
 
+
+    if let Some(chat_gpt) = chat_gpt {
         let response: CompletionResponse = chat_gpt
         .send_message(format!(
             "Please response in 120 characters or less. Can you response as if you were {}. The prompt is: \"{}\"",
@@ -188,6 +191,8 @@ pub async fn explain(
         ))
         .await?;
 
+        let mut personality = personality;
+        
         if !personality.is_empty() {
             personality = format!(" {}", personality);
         }
@@ -254,9 +259,6 @@ pub async fn llama2(
     }
 }
 
-const COOLDOWN_DURATION: Duration = Duration::from_secs(120); // 2 minutes
-const MESSAGE_LIMIT: usize = 50;
-
 pub async fn eval(
     chat_message: ChatMessage,
     state: Arc<Mutex<AppState>>,
@@ -288,36 +290,6 @@ pub async fn eval(
 
     match meval::eval_str(&expression.replace('x', "*")) {
         Ok(response) => {
-            {
-                let mut state = state.lock().await;
-
-                let user_cooldown = state
-                    .cmd_state
-                    .user_cooldowns
-                    .entry(chat_message.user_name.clone())
-                    .or_insert(UserCooldown {
-                        timestamps: Vec::new(),
-                    });
-
-                // Remove outdated timestamps
-                user_cooldown
-                    .timestamps
-                    .retain(|&timestamp| timestamp.elapsed() < COOLDOWN_DURATION);
-
-                // Check cooldown status
-                if user_cooldown.timestamps.len() >= MESSAGE_LIMIT {
-                    warn!(
-                        "Skipping eval. User {} has reached the message limit of {}. Time left till cooldown: {:?}",
-                        chat_message.user_name, MESSAGE_LIMIT,
-                        COOLDOWN_DURATION - user_cooldown.timestamps[0].elapsed());
-
-                    return Ok(None);
-                }
-
-                // If not in cooldown, add the new timestamp
-                user_cooldown.timestamps.push(Instant::now());
-            }
-
             info!("Eval: {} = {}", message, response);
             Ok(Some(ChatResponse::new(response.to_string())))
         }
@@ -446,14 +418,18 @@ async fn handle_python_execution(
     // Get the first word of the message
     let command = message.split_whitespace().next().unwrap_or_default();
 
-    let state = state.lock().await;
+    let (script, config) = {
+        let state = state.lock().await;
 
-    if let Some(script) = state
-        .script_repository
-        .get_script_by_trigger(command)
-        .await
-        .ok()
-        .flatten()
+        (state
+            .script_repository
+            .get_script_by_trigger(command)
+            .await
+            .ok()
+            .flatten(), state.config.clone())
+    };
+
+    if let Some(script) = script
     {
         chat_message.command = command.to_string();
         chat_message.raw_message = chat_message
@@ -463,7 +439,7 @@ async fn handle_python_execution(
             .to_string();
         chat_message.message = message.replace(command, "").trim().to_string();
 
-        let config = state.config.clone();
+        let config = config;
 
         let response = python::process_python_command(&script, chat_message, &config);
 
