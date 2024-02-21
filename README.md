@@ -7,7 +7,6 @@ SourceCmdGui is a exmaple implementation of [source_cmd_parser](https://github.c
     * Ping
     * Explain (ChatGPT explaination feature)
     * Personality (Sets perstioanlity for Explain)
-    * Llama2 (Uses Ollama to do the same thing as explain but llama)
     * Eval (Evaluates math expressions)
     * Chat GPT Respond (Responds to every chat message)
     * Mimic (Repeats what was just said in chat)

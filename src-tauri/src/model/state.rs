@@ -4,7 +4,6 @@ use std::{
 };
 
 use chatgpt::{client::ChatGPT, converse::Conversation};
-use ollama_rs::{generation::completion::GenerationContext, Ollama};
 
 use serde::{Deserialize, Serialize};
 
@@ -47,16 +46,10 @@ impl Default for Config {
 
 #[derive(Default)]
 pub struct CmdState {
-    pub mimic: Option<String>,
-
     // Chat GPT Related
     pub chat_gpt: Option<ChatGPT>,
     pub conversations: HashMap<String, Conversation>,
     pub personality: String,
-
-    // Ollama related
-    pub ollama: Ollama,
-    pub message_context: HashMap<String, GenerationContext>,
 
     // Dynamic context for python
     pub python_context: DynamicPythonCtx,

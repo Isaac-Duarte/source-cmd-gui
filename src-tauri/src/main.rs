@@ -29,7 +29,6 @@ use model::{
     entity::Script,
     state::{AppState, CmdState, CommandResponse, Config},
 };
-use ollama_rs::Ollama;
 
 use python::DynamicPythonCtx;
 use repository::{JsonRepository, ScriptRepository};
@@ -156,12 +155,9 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Source
     let api_key = config.openai_api_key.clone();
 
     let cmd_state = CmdState {
-        mimic: None,
         personality: String::new(),
         chat_gpt: ChatGPT::new(api_key).ok(),
         conversations: HashMap::new(),
-        ollama: Ollama::default(),
-        message_context: HashMap::new(),
         python_context: DynamicPythonCtx::default(),
     };
 

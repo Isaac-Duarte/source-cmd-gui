@@ -2,7 +2,6 @@ use std::{sync::Arc, time::Duration};
 
 use chatgpt::types::CompletionResponse;
 use log::info;
-use ollama_rs::generation::completion::request::GenerationRequest;
 use source_cmd_parser::{
     log_parser::{ParseLog, SourceCmdFn},
     model::{ChatMessage, ChatResponse},
@@ -96,13 +95,6 @@ pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>, SourceCmdGuiError>> {
             false,
         ),
         Command::new(
-            Box::new(llama2),
-            "Llama2".to_string(),
-            ".llama2".to_string(),
-            "Generates a llama2 response (Requires Ollama)".to_string(),
-            false,
-        ),
-        Command::new(
             Box::new(eval),
             "Eval".to_string(),
             "eval".to_string(),
@@ -129,13 +121,6 @@ pub fn get_commands() -> Vec<Command<Arc<Mutex<AppState>>, SourceCmdGuiError>> {
             "mimic".to_string(),
             "Mimics the message sent".to_string(),
             true,
-        ),
-        Command::new(
-            Box::new(mimic_set),
-            "Mimic Set".to_string(),
-            ".mimic".to_string(),
-            "Sets the person to mimic".to_string(),
-            false,
         ),
         Command::new(
             Box::new(handle_python_execution),
@@ -221,41 +206,6 @@ pub async fn personality(
     state.cmd_state.personality = message;
 
     Ok(None)
-}
-
-pub async fn llama2(
-    chat_message: ChatMessage,
-    state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
-    if !can_run_command(&chat_message.command, &state).await {
-        return Ok(None);
-    }
-
-    let mut state = state.lock().await;
-
-    let mut request = GenerationRequest::new(
-        "llama2-uncensored:latest".to_string(),
-        format!(
-            "Please keep the response under 120 characters. {} Says \"{}\"",
-            chat_message.user_name, chat_message.message
-        ),
-    );
-
-    if let Some(context) = state.cmd_state.message_context.get(&chat_message.user_name) {
-        request = request.context(context.clone());
-    }
-
-    let response = state.cmd_state.ollama.generate(request).await;
-
-    if let Ok(response) = response {
-        state.cmd_state.message_context.insert(
-            chat_message.user_name.clone(),
-            response.final_data.unwrap().context,
-        );
-        Ok(Some(ChatResponse::new(response.response)))
-    } else {
-        Ok(None)
-    }
 }
 
 pub async fn eval(
@@ -367,32 +317,9 @@ async fn mimic(
         return Ok(None);
     }
 
-    let state = state.lock().await;
-
-    if let Some(mimic) = &state.cmd_state.mimic {
-        if chat_message.user_name.contains(mimic) {
-            return Ok(Some(ChatResponse::new(
-                chat_message.raw_message.to_string(),
-            )));
-        }
-    }
-
-    Ok(None)
-}
-
-async fn mimic_set(
-    chat_message: ChatMessage,
-    state: Arc<Mutex<AppState>>,
-) -> Result<Option<ChatResponse>, SourceCmdGuiError> {
-    let mut state = state.lock().await;
-
-    if !chat_message.user_name.contains(&state.config.owner) {
-        return Ok(None);
-    }
-
-    state.cmd_state.mimic = Some(chat_message.message);
-
-    Ok(None)
+    return Ok(Some(ChatResponse::new(
+        chat_message.raw_message.to_string(),
+    )));
 }
 
 /// Handles python execution
