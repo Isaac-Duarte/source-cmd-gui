@@ -18,10 +18,7 @@ pub enum SourceCmdGuiError {
 
     #[error(transparent)]
     ChatGptError(#[from] chatgpt::err::Error),
-
-    #[error(transparent)]
-    TokioRusqlite(#[from] tokio_rusqlite::Error),
-
+    
     #[error(transparent)]
     TokioJoinError(#[from] tokio::task::JoinError),
 
