@@ -10,10 +10,14 @@ mod python;
 pub(crate) mod repository;
 
 use std::{
-    collections::HashMap, env, hash::Hash, path::PathBuf, sync::{
+    collections::HashMap,
+    env,
+    path::PathBuf,
+    sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
-    }, time::Duration
+    },
+    time::Duration,
 };
 
 use chatgpt::prelude::ChatGPT;
@@ -101,7 +105,7 @@ async fn get_code(
 async fn save_code(
     state: State<'_, Arc<Mutex<AppState>>>,
     script_id: &str,
-    code: &str
+    code: &str,
 ) -> SourceCmdGuiResult {
     let state = state.lock().await;
 
@@ -113,7 +117,6 @@ async fn save_code(
 
     Ok(())
 }
-
 
 #[tauri::command]
 async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> SourceCmdGuiResult {
@@ -159,7 +162,7 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Source
         conversations: HashMap::new(),
         ollama: Ollama::default(),
         message_context: HashMap::new(),
-        python_context: DynamicPythonCtx::default()
+        python_context: DynamicPythonCtx::default(),
     };
 
     state.cmd_state = cmd_state;
@@ -268,7 +271,8 @@ async fn main() -> SourceCmdGuiResult {
         config,
         stop_flag: Arc::<AtomicBool>::default(),
         cmd_state: CmdState::default(),
-        script_repository: JsonRepository::new(SCRIPTS_REPOSITORY.to_string_lossy().to_string()).await,
+        script_repository: JsonRepository::new(SCRIPTS_REPOSITORY.to_string_lossy().to_string())
+            .await,
     };
 
     // Setup database tables

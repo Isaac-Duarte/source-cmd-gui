@@ -427,7 +427,7 @@ async fn handle_python_execution(
                 .ok()
                 .flatten(),
             state.config.clone(),
-            state.cmd_state.python_context.clone()
+            state.cmd_state.python_context.clone(),
         )
     };
 
@@ -440,9 +440,8 @@ async fn handle_python_execution(
             .to_string();
         chat_message.message = message.replace(command, "").trim().to_string();
 
-        let config = config;
-
-        let (response, context) = python::process_python_command(&script, chat_message, &config, python_context).await?;
+        let (response, context) =
+            python::process_python_command(&script, chat_message, &config, python_context).await?;
 
         {
             let mut state = state.lock().await;
@@ -451,7 +450,7 @@ async fn handle_python_execution(
                 state.cmd_state.python_context = context;
             }
         }
-        
+
         Ok(response)
     } else {
         Ok(None)

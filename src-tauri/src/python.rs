@@ -1,16 +1,12 @@
-use std::{collections::HashMap, sync::Arc};
-
 use log::error;
 use pyo3::{
-    ffi::PyObject,
-    types::{PyDict, PyList, PyModule, PyString},
-    PyAny, PyErr, PyResult, Python, ToPyObject,
+    types::{PyDict, PyModule, PyString},
+    PyErr, Python,
 };
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
 use source_cmd_parser::model::{ChatMessage, ChatResponse};
-use tokio::sync::Mutex;
 
 use crate::{
     error::SourceCmdGuiResult,
@@ -117,9 +113,10 @@ def _main(locals):
     });
 
     Ok(match result {
-        Ok((output, context)) => {
-            (output.map(ChatResponse::new), context.map(DynamicPythonCtx::from))
-        },
+        Ok((output, context)) => (
+            output.map(ChatResponse::new),
+            context.map(DynamicPythonCtx::from),
+        ),
         Err(e) => {
             error!("Error running python command: {}", e);
             (None, None)
@@ -145,8 +142,6 @@ impl Default for DynamicPythonCtx {
 
 impl From<String> for DynamicPythonCtx {
     fn from(value: String) -> Self {
-        Self {
-            inner: value
-        }
+        Self { inner: value }
     }
 }

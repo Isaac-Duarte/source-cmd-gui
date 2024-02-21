@@ -5,9 +5,8 @@ use std::{
 
 use chatgpt::{client::ChatGPT, converse::Conversation};
 use ollama_rs::{generation::completion::GenerationContext, Ollama};
-use pyo3::PyObject;
+
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 
 use crate::{error::SourceCmdGuiResult, python::DynamicPythonCtx, repository::JsonRepository};
 
@@ -60,7 +59,7 @@ pub struct CmdState {
     pub message_context: HashMap<String, GenerationContext>,
 
     // Dynamic context for python
-    pub python_context: DynamicPythonCtx
+    pub python_context: DynamicPythonCtx,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

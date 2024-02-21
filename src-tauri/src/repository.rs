@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use tokio::{
-    fs::{self, File, OpenOptions},
+    fs::{File, OpenOptions},
     io::{AsyncReadExt, AsyncWriteExt},
 };
 

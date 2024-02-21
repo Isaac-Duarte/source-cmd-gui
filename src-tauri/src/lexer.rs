@@ -9,17 +9,11 @@ pub enum Token {
 }
 impl Token {
     pub fn is_number(&self) -> bool {
-        match self {
-            Token::Number(_) => true,
-            _ => false,
-        }
+        matches!(self, Token::Number(_))
     }
 
     pub fn is_parathesis(&self) -> bool {
-        match self {
-            Token::LeftParenthesis | Token::RightParenthesis => true,
-            _ => false,
-        }
+        matches!(self, Token::LeftParenthesis | Token::RightParenthesis)
     }
 }
 
