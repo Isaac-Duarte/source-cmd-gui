@@ -1,10 +1,7 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Duration};
 
 use chatgpt::types::CompletionResponse;
-use log::{info, warn};
+use log::info;
 use ollama_rs::generation::completion::request::GenerationRequest;
 use source_cmd_parser::{
     log_parser::{ParseLog, SourceCmdFn},
@@ -16,7 +13,7 @@ use crate::{
     error::SourceCmdGuiError,
     lexer,
     model::state::{AppState, CommandResponse},
-    python::{self, Script},
+    python,
     repository::ScriptRepository,
 };
 pub struct Command<
@@ -178,9 +175,11 @@ pub async fn explain(
     let (chat_gpt, personality) = {
         let state = state.lock().await;
 
-        (state.cmd_state.chat_gpt.clone(), state.cmd_state.personality.clone())
+        (
+            state.cmd_state.chat_gpt.clone(),
+            state.cmd_state.personality.clone(),
+        )
     };
-
 
     if let Some(chat_gpt) = chat_gpt {
         let response: CompletionResponse = chat_gpt
@@ -192,7 +191,7 @@ pub async fn explain(
         .await?;
 
         let mut personality = personality;
-        
+
         if !personality.is_empty() {
             personality = format!(" {}", personality);
         }
@@ -288,7 +287,7 @@ pub async fn eval(
 
     info!("Eval: {}", expression);
 
-    match meval::eval_str(&expression.replace('x', "*")) {
+    match meval::eval_str(expression.replace('x', "*")) {
         Ok(response) => {
             info!("Eval: {} = {}", message, response);
             Ok(Some(ChatResponse::new(response.to_string())))
@@ -372,10 +371,9 @@ async fn mimic(
 
     if let Some(mimic) = &state.cmd_state.mimic {
         if chat_message.user_name.contains(mimic) {
-            return Ok(Some(ChatResponse::new(format!(
-                "{}",
-                chat_message.raw_message
-            ))));
+            return Ok(Some(ChatResponse::new(
+                chat_message.raw_message.to_string(),
+            )));
         }
     }
 
@@ -391,9 +389,9 @@ async fn mimic_set(
     if !chat_message.user_name.contains(&state.config.owner) {
         return Ok(None);
     }
-    
+
     state.cmd_state.mimic = Some(chat_message.message);
-    
+
     Ok(None)
 }
 
@@ -418,19 +416,22 @@ async fn handle_python_execution(
     // Get the first word of the message
     let command = message.split_whitespace().next().unwrap_or_default();
 
-    let (script, config) = {
+    let (script, config, python_context) = {
         let state = state.lock().await;
 
-        (state
-            .script_repository
-            .get_script_by_trigger(command)
-            .await
-            .ok()
-            .flatten(), state.config.clone())
+        (
+            state
+                .script_repository
+                .get_script_by_trigger(command)
+                .await
+                .ok()
+                .flatten(),
+            state.config.clone(),
+            state.cmd_state.python_context.clone()
+        )
     };
 
-    if let Some(script) = script
-    {
+    if let Some(script) = script {
         chat_message.command = command.to_string();
         chat_message.raw_message = chat_message
             .raw_message
@@ -441,8 +442,16 @@ async fn handle_python_execution(
 
         let config = config;
 
-        let response = python::process_python_command(&script, chat_message, &config);
+        let (response, context) = python::process_python_command(&script, chat_message, &config, python_context).await?;
 
+        {
+            let mut state = state.lock().await;
+
+            if let Some(context) = context {
+                state.cmd_state.python_context = context;
+            }
+        }
+        
         Ok(response)
     } else {
         Ok(None)

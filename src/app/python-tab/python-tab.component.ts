@@ -1,12 +1,13 @@
-import {Component, OnInit} from '@angular/core';
-import {CodeModel} from "@ngstack/code-editor";
+import { Component, OnInit } from '@angular/core';
+import { CodeModel } from "@ngstack/code-editor";
 import { invoke } from '@tauri-apps/api';
 
 interface Script {
     id?: number;
     name: string;
-    code: string;
+    code?: string;
     trigger: string;
+    enabled: boolean;
 }
 
 @Component({
@@ -37,20 +38,17 @@ export class PythonTabComponent implements OnInit {
             this.scripts = scripts as Script[];
 
             if (!this.currentScript) {
-                this.currentScript = this.scripts[0];
-                this.setModelCode(this.currentScript.code);
+                this.selectScript(this.scripts[0]);
+            }
+
+            if (this.scripts.length == 0) {
+                this.setModelCode("");
             }
         });
     }
 
     createNewScript(): void {
-        const script: Script = {
-            name: 'New Script',
-            code: '',
-            trigger: '',
-        };
-
-        invoke('add_script', {script: script}).then((res) => {
+        invoke('add_script', { scriptName: "New Script" }).then((res) => {
             console.log(res);
             this.loadScripts();
             this.selectScript(res as Script);
@@ -59,11 +57,18 @@ export class PythonTabComponent implements OnInit {
 
     selectScript(script: Script): void {
         this.currentScript = script;
-        this.setModelCode(script.code);
+
+        invoke('get_code', { scriptId: this.currentScript?.id }).then((res) => {
+            this.setModelCode(res as string);
+
+            if (this.currentScript) {
+                this.currentScript.code = res as string;
+            }
+        });
     }
 
     deleteScript(): void {
-        invoke('delete_script', {id: this.currentScript?.id}).then(() => {
+        invoke('delete_script', { id: this.currentScript?.id }).then(() => {
             this.currentScript = undefined;
             this.loadScripts();
         });
@@ -78,9 +83,12 @@ export class PythonTabComponent implements OnInit {
     saveScript(): void {
         if (this.currentScript) {
             this.currentScript.code = this.model.value;
-            invoke('update_script', {script: this.currentScript}).then(() => {
+
+            invoke('update_script', { script: this.currentScript }).then(() => {
                 this.loadScripts();
             });
+
+            invoke('save_code', { scriptId: this.currentScript.id, code: this.currentScript.code })
         }
     }
 

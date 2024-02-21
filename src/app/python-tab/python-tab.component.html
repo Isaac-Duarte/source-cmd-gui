@@ -45,6 +45,15 @@
             </div>
         </div>
 
+        <div class="command-input">
+            <label for="trigger">Enabled</label>
+            <div>
+                <input id="trigger" type="checkbox" [(ngModel)]="currentScript.enabled"
+                       (change)="saveScript()"
+                       placeholder="Enter trigger command"/>
+            </div>
+        </div>
+
         <div class="command-input-btn-container">
             <button class="command-input-btn" (click)="saveScript()">Save</button>
             <button class="command-input-btn btn-delete" (click)="deleteScript()">Delete</button>

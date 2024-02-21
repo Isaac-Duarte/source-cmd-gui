@@ -20,9 +20,6 @@ pub enum SourceCmdGuiError {
     ChatGptError(#[from] chatgpt::err::Error),
 
     #[error(transparent)]
-    RusqliteError(#[from] rusqlite::Error),
-
-    #[error(transparent)]
     TokioRusqlite(#[from] tokio_rusqlite::Error),
 
     #[error(transparent)]
@@ -30,6 +27,9 @@ pub enum SourceCmdGuiError {
 
     #[error(transparent)]
     Pyo3Error(#[from] pyo3::PyErr),
+
+    #[error("The {0} script was not found.")]
+    ScriptNotFound(String),
 }
 
 impl SourceCmdGuiError {

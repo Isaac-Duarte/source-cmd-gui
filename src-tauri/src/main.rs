@@ -7,17 +7,13 @@ mod lexer;
 mod logger;
 mod model;
 mod python;
-mod repository;
+pub(crate) mod repository;
 
 use std::{
-    collections::HashMap,
-    env,
-    path::PathBuf,
-    sync::{
+    collections::HashMap, env, hash::Hash, path::PathBuf, sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
-    },
-    time::Duration,
+    }, time::Duration
 };
 
 use chatgpt::prelude::ChatGPT;
@@ -25,27 +21,30 @@ use error::{SourceCmdGuiError, SourceCmdGuiResult};
 use lazy_static::lazy_static;
 use log::{info, warn};
 use logger::Log;
-use model::state::{AppState, CmdState, CommandResponse, Config};
+use model::{
+    entity::Script,
+    state::{AppState, CmdState, CommandResponse, Config},
+};
 use ollama_rs::Ollama;
 
-use repository::{ScriptRepository, Repository};
+use python::DynamicPythonCtx;
+use repository::{JsonRepository, ScriptRepository};
 use source_cmd_parser::log_parser::SourceCmdLogParser;
 use tauri::{Manager, State};
-use tokio::sync::{mpsc, Mutex};
+use tokio::{
+    fs,
+    sync::{mpsc, Mutex},
+};
 
 lazy_static! {
-    static ref CONFIG_FILE: PathBuf = {
+    static ref CONFIG_DIR: PathBuf = {
         let home_dir = dirs::home_dir().expect("Failed to get home directory");
-        home_dir.join(".souce-cmd-gui-config.json")
+
+        home_dir.join(".source-cmd-gui/")
     };
-    static ref SQLITE_DB_FILE: String = {
-        let home_dir = dirs::home_dir().expect("Failed to get home directory");
-        home_dir
-            .join(".souce-cmd-gui-scripts.db")
-            .to_str()
-            .unwrap()
-            .to_string()
-    };
+    static ref CONFIG_FILE: PathBuf = CONFIG_DIR.join("config.json");
+    static ref SCRIPTS_DIR: PathBuf = CONFIG_DIR.join("scripts");
+    static ref SCRIPTS_REPOSITORY: PathBuf = SCRIPTS_DIR.join("repo.json");
 }
 
 #[tauri::command]
@@ -55,6 +54,8 @@ async fn is_running(state: State<'_, Arc<Mutex<AppState>>>) -> SourceCmdGuiResul
 
 async fn load_or_create_config() -> SourceCmdGuiResult<Config> {
     let config = Config::default();
+
+    fs::create_dir_all(SCRIPTS_DIR.to_string_lossy().to_string()).await?;
 
     // Load config from file
     if let Ok(config_json) = tokio::fs::read_to_string(CONFIG_FILE.clone()).await {
@@ -81,6 +82,38 @@ async fn get_config(state: State<'_, Arc<Mutex<AppState>>>) -> SourceCmdGuiResul
 
     Ok(state.config.clone())
 }
+
+#[tauri::command]
+async fn get_code(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    script_id: &str,
+) -> SourceCmdGuiResult<String> {
+    let state = state.lock().await;
+
+    Ok(state
+        .script_repository
+        .get_script(script_id)?
+        .get_code()
+        .await?)
+}
+
+#[tauri::command]
+async fn save_code(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    script_id: &str,
+    code: &str
+) -> SourceCmdGuiResult {
+    let state = state.lock().await;
+
+    state
+        .script_repository
+        .get_script(script_id)?
+        .save_code(code)
+        .await?;
+
+    Ok(())
+}
+
 
 #[tauri::command]
 async fn save_config(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> SourceCmdGuiResult {
@@ -126,6 +159,7 @@ async fn start(state: State<'_, Arc<Mutex<AppState>>>, config: Config) -> Source
         conversations: HashMap::new(),
         ollama: Ollama::default(),
         message_context: HashMap::new(),
+        python_context: DynamicPythonCtx::default()
     };
 
     state.cmd_state = cmd_state;
@@ -183,9 +217,7 @@ async fn stop(state: State<'_, Arc<Mutex<AppState>>>) -> SourceCmdGuiResult {
 }
 
 #[tauri::command]
-async fn get_scripts(
-    state: State<'_, Arc<Mutex<AppState>>>,
-) -> SourceCmdGuiResult<Vec<python::Script>> {
+async fn get_scripts(state: State<'_, Arc<Mutex<AppState>>>) -> SourceCmdGuiResult<Vec<Script>> {
     let state = state.lock().await;
 
     state.script_repository.get_scripts().await
@@ -194,18 +226,18 @@ async fn get_scripts(
 #[tauri::command]
 async fn add_script(
     state: State<'_, Arc<Mutex<AppState>>>,
-    script: python::Script,
-) -> SourceCmdGuiResult<python::Script> {
-    let state = state.lock().await;
+    script_name: String,
+) -> SourceCmdGuiResult<Script> {
+    let mut state = state.lock().await;
 
-    info!("Adding script: {:?}", script);
-    
-    state.script_repository.add_script(script).await
+    info!("Adding script: {:?}", script_name);
+
+    state.script_repository.add_script(script_name).await
 }
 
 #[tauri::command]
-async fn delete_script(state: State<'_, Arc<Mutex<AppState>>>, id: i32) -> SourceCmdGuiResult {
-    let state = state.lock().await;
+async fn delete_script(state: State<'_, Arc<Mutex<AppState>>>, id: &str) -> SourceCmdGuiResult {
+    let mut state = state.lock().await;
 
     state.script_repository.delete_script(id).await
 }
@@ -213,11 +245,14 @@ async fn delete_script(state: State<'_, Arc<Mutex<AppState>>>, id: i32) -> Sourc
 #[tauri::command]
 async fn update_script(
     state: State<'_, Arc<Mutex<AppState>>>,
-    script: python::Script,
+    script: Script,
 ) -> SourceCmdGuiResult {
-    let state = state.lock().await;
+    let mut state = state.lock().await;
 
-    state.script_repository.update_script(&script).await
+    state
+        .script_repository
+        .update_script(&script.id.clone(), script)
+        .await
 }
 
 #[tokio::main]
@@ -228,17 +263,17 @@ async fn main() -> SourceCmdGuiResult {
 
     let config = load_or_create_config().await?;
 
-    let app_state = AppState {
+    let mut app_state = AppState {
         running_thread: None,
         config,
         stop_flag: Arc::<AtomicBool>::default(),
         cmd_state: CmdState::default(),
-        script_repository: repository::SqliteRepository::new(&SQLITE_DB_FILE).await?,
+        script_repository: JsonRepository::new(SCRIPTS_REPOSITORY.to_string_lossy().to_string()).await,
     };
-    
+
     // Setup database tables
     app_state.script_repository.init().await?;
-    
+
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(app_state)))
         .invoke_handler(tauri::generate_handler![
@@ -251,7 +286,9 @@ async fn main() -> SourceCmdGuiResult {
             get_scripts,
             add_script,
             delete_script,
-            update_script
+            update_script,
+            get_code,
+            save_code
         ])
         .setup(move |app| {
             let app_handle = app.handle();

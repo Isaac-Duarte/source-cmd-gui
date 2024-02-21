@@ -1,173 +1,140 @@
-use async_trait::async_trait;
-use rusqlite::params;
+use std::path::Path;
 
-use tokio_rusqlite::Connection;
+use tokio::{
+    fs::{self, File, OpenOptions},
+    io::{AsyncReadExt, AsyncWriteExt},
+};
 
-use crate::{error::SourceCmdGuiResult, python::Script};
+use crate::{
+    error::{SourceCmdGuiError, SourceCmdGuiResult},
+    model::entity::Script,
+};
 
-#[async_trait]
-pub trait Repository {
-    async fn init(&self) -> SourceCmdGuiResult;
-}
-#[async_trait]
 pub trait ScriptRepository {
-    async fn add_script(&self, script: Script) -> SourceCmdGuiResult<Script>;
-    async fn get_script(&self, id: i32) -> SourceCmdGuiResult<Script>;
-    async fn update_script(&self, script: &Script) -> SourceCmdGuiResult;
-    async fn delete_script(&self, id: i32) -> SourceCmdGuiResult;
+    async fn init(&mut self) -> SourceCmdGuiResult;
+    async fn add_script(&mut self, script: String) -> SourceCmdGuiResult<Script>;
+    fn get_script(&self, id: &str) -> SourceCmdGuiResult<Script>;
+    async fn update_script(&mut self, id: &str, script: Script) -> SourceCmdGuiResult;
+    async fn delete_script(&mut self, id: &str) -> SourceCmdGuiResult;
     async fn get_scripts(&self) -> SourceCmdGuiResult<Vec<Script>>;
     async fn get_script_by_trigger(&self, trigger: &str) -> SourceCmdGuiResult<Option<Script>>;
 }
-
-pub struct SqliteRepository {
-    conn: Connection,
+pub struct JsonRepository {
+    internal_scripts: Vec<Script>,
+    file_path: String,
 }
 
-impl SqliteRepository {
-    pub async fn new(db_path: &str) -> SourceCmdGuiResult<Self> {
-        let conn = Connection::open(db_path).await?;
-        Ok(SqliteRepository { conn })
+impl JsonRepository {
+    pub async fn new(file_path: String) -> Self {
+        JsonRepository {
+            internal_scripts: Vec::new(),
+            file_path,
+        }
     }
-}
 
-#[async_trait]
-impl Repository for SqliteRepository {
-    async fn init(&self) -> SourceCmdGuiResult {
-        self.conn
-            .call(|conn| {
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS scripts (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                code TEXT NOT NULL,
-                trigger TEXT NOT NULL
-            )",
-                    [],
-                )?;
+    async fn read_from_file(&mut self) -> Result<(), std::io::Error> {
+        let path = Path::new(&self.file_path);
 
-                Ok(())
-            })
+        if path.exists() {
+            let mut file = File::open(path).await?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).await?;
+            self.internal_scripts = serde_json::from_str(&contents)?;
+        }
+
+        Ok(())
+    }
+
+    async fn write_to_file(&self) -> Result<(), std::io::Error> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&self.file_path)
             .await?;
+
+        let contents = serde_json::to_string(&self.internal_scripts)?;
+        file.write_all(contents.as_bytes()).await?;
 
         Ok(())
     }
 }
 
-#[async_trait]
-impl ScriptRepository for SqliteRepository {
-    async fn add_script(&self, script: Script) -> SourceCmdGuiResult<Script> {
-        self.conn
-            .call(move |conn| {
-                let mut stmt =
-                    conn.prepare("INSERT INTO scripts (name, code, trigger) VALUES (?1, ?2, ?3)")?;
+impl ScriptRepository for JsonRepository {
+    async fn init(&mut self) -> SourceCmdGuiResult {
+        self.read_from_file().await?;
 
-                let id = stmt.insert(params![script.name, script.code, script.trigger])?;
-
-                Ok(Script {
-                    id: Some(id),
-                    ..script
-                })
-            })
-            .await
-            .map_err(|e| e.into())
+        Ok(())
     }
 
-    async fn get_script(&self, id: i32) -> SourceCmdGuiResult<Script> {
-        self.conn
-            .call(move |conn| {
-                let mut stmt =
-                    conn.prepare("SELECT id, name, code, trigger FROM scripts WHERE id = ?1")?;
+    async fn add_script(&mut self, script_name: String) -> SourceCmdGuiResult<Script> {
+        let script = Script::new(script_name);
 
-                let script = stmt.query_row(params![id], |row| {
-                    Ok(Script {
-                        id: Some(row.get(0)?),
-                        name: row.get(1)?,
-                        code: row.get(2)?,
-                        trigger: row.get(3)?,
-                    })
-                })?;
+        script.save_code(
+r#"# The entry point of the script
+def main(args):
+    # Args is layed as below
+    
+    # message_struct = args['message'] # This is the message dict
+    # message = message_struct['message'] # This is the chat message
+    # command = message_struct['command'] # This is the message command (Trigger)
+    # user_name = message_struct['user_name'] # This is the user name of the user who sent the message
+    # time_stamp = message_struct['time_stamp'] # This is a TFC3339 string
 
-                Ok(script)
-            })
-            .await
-            .map_err(|e| e.into())
+    # config = args['config']
+    
+    # The return can be None or a String
+    
+    pass"#).await?;
+
+        self.internal_scripts.push(script.clone());
+        self.write_to_file().await?;
+
+        Ok(script)
     }
 
-    async fn update_script(&self, script: &Script) -> SourceCmdGuiResult {
-        let script = script.clone();
-
-        self.conn
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "UPDATE scripts SET name = ?1, code = ?2, trigger = ?3 WHERE id = ?4",
-                )?;
-
-                stmt.execute(params![script.name, script.code, script.trigger, script.id])?;
-
-                Ok(())
-            })
-            .await
-            .map_err(|e| e.into())
+    fn get_script(&self, id: &str) -> SourceCmdGuiResult<Script> {
+        self.internal_scripts
+            .iter()
+            .find(|&script| script.id == id)
+            .cloned()
+            .ok_or_else(|| SourceCmdGuiError::ScriptNotFound(id.to_string()))
     }
 
-    async fn delete_script(&self, id: i32) -> SourceCmdGuiResult {
-        self.conn
-            .call(move |conn| {
-                let mut stmt = conn.prepare("DELETE FROM scripts WHERE id = ?1")?;
+    async fn update_script(&mut self, id: &str, script: Script) -> SourceCmdGuiResult {
+        let position = self.internal_scripts.iter().position(|s| s.id == id);
+        if let Some(pos) = position {
+            self.internal_scripts[pos] = script;
+            self.write_to_file().await?;
+            Ok(())
+        } else {
+            Err(SourceCmdGuiError::ScriptNotFound(id.to_string()))
+        }
+    }
 
-                stmt.execute(params![id])?;
+    async fn delete_script(&mut self, id: &str) -> SourceCmdGuiResult {
+        if let Some(pos) = self.internal_scripts.iter().position(|s| s.id == id) {
+            let script = self.internal_scripts.get(pos).unwrap();
+            script.delete_script().await?;
 
-                Ok(())
-            })
-            .await
-            .map_err(|e| e.into())
+            self.internal_scripts.remove(pos);
+            self.write_to_file().await?;
+
+            Ok(())
+        } else {
+            Err(SourceCmdGuiError::ScriptNotFound(id.to_string()))
+        }
     }
 
     async fn get_scripts(&self) -> SourceCmdGuiResult<Vec<Script>> {
-        self.conn
-            .call(move |conn| {
-                let mut stmt = conn.prepare("SELECT id, name, code, trigger FROM scripts")?;
-
-                let scripts = stmt.query_map([], |row| {
-                    Ok(Script {
-                        id: Some(row.get(0)?),
-                        name: row.get(1)?,
-                        code: row.get(2)?,
-                        trigger: row.get(3)?,
-                    })
-                })?;
-
-                let mut result = Vec::new();
-                for script in scripts {
-                    result.push(script?);
-                }
-
-                Ok(result)
-            })
-            .await
-            .map_err(|e| e.into())
+        Ok(self.internal_scripts.clone())
     }
 
     async fn get_script_by_trigger(&self, trigger: &str) -> SourceCmdGuiResult<Option<Script>> {
-        let trigger = trigger.to_string();
-        
-        self.conn
-            .call(move |conn| {
-                let mut stmt =
-                    conn.prepare("SELECT id, name, code, trigger FROM scripts WHERE trigger = ?1")?;
-
-                let script = stmt.query_row(params![trigger], |row| {
-                    Ok(Script {
-                        id: Some(row.get(0)?),
-                        name: row.get(1)?,
-                        code: row.get(2)?,
-                        trigger: row.get(3)?,
-                    })
-                })?;
-
-                Ok(Some(script))
-            })
-            .await
-            .map_err(|e| e.into())
+        Ok(self
+            .internal_scripts
+            .iter()
+            .find(|&s| s.enabled && s.trigger == trigger)
+            .cloned())
     }
 }

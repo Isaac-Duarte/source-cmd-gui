@@ -1,14 +1,15 @@
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicBool, Arc},
-    time::Instant,
 };
 
 use chatgpt::{client::ChatGPT, converse::Conversation};
 use ollama_rs::{generation::completion::GenerationContext, Ollama};
+use pyo3::PyObject;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 
-use crate::{error::SourceCmdGuiResult, repository::SqliteRepository};
+use crate::{error::SourceCmdGuiResult, python::DynamicPythonCtx, repository::JsonRepository};
 
 use super::GameParser;
 
@@ -17,7 +18,7 @@ pub struct AppState {
     pub config: Config,
     pub stop_flag: Arc<AtomicBool>,
     pub cmd_state: CmdState,
-    pub script_repository: SqliteRepository,
+    pub script_repository: JsonRepository,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -57,6 +58,9 @@ pub struct CmdState {
     // Ollama related
     pub ollama: Ollama,
     pub message_context: HashMap<String, GenerationContext>,
+
+    // Dynamic context for python
+    pub python_context: DynamicPythonCtx
 }
 
 #[derive(Clone, Serialize, Deserialize)]
