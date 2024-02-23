@@ -29,7 +29,7 @@ def main(args):
     asyncio.run(Say(message))
     pass
 
-async def Say(text, lang="us"):
+async def Say(text):
     # check for bad words
     if "badword" in text:
         return
@@ -82,6 +82,7 @@ async def Say(text, lang="us"):
 - dectalk = the path to dectalk - say
 - paplay  = path to paplay
 - paplay_arg3 = name of the virtual mic
+- lang  = can be "us, uk, gr, sp, la, fr"
 
 ```python
 import os
@@ -94,7 +95,7 @@ def main(args):
     asyncio.run(Say(message))
     pass
 
-async def Say(text, lang="us"):
+async def Say(text):
     # check for bad words
     if "badword" in text:
         return
@@ -107,6 +108,9 @@ async def Say(text, lang="us"):
 
     # output the speech to a wav file
     filename = f"/home/username/Desktop/Dectalk/sounds/{random.randint(1111, 9999)}.wav"
+    
+    # lang dictionary
+    lang            = "us"
     
     # setup the command arguments
     dectalk_arg     = '-l'
