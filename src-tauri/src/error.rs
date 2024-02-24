@@ -25,6 +25,9 @@ pub enum SourceCmdGuiError {
     #[error(transparent)]
     Pyo3Error(#[from] pyo3::PyErr),
 
+    #[error(transparent)]
+    SerdeError(#[from] serde_json::Error),
+
     #[error("The {0} script was not found.")]
     ScriptNotFound(String),
 }

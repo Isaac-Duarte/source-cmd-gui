@@ -374,7 +374,7 @@ async fn handle_python_execution(
             let mut state = state.lock().await;
 
             if let Some(context) = context {
-                state.cmd_state.python_context = context;
+                state.cmd_state.python_context.override_values(&context);
             }
         }
 

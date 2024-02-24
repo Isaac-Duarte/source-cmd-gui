@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use log::error;
 use pyo3::{
     types::{PyDict, PyModule, PyString},
@@ -6,10 +8,14 @@ use pyo3::{
 
 use serde::{Deserialize, Serialize};
 
-use source_cmd_parser::model::{ChatMessage, ChatResponse};
+use serde_json::Value;
+use source_cmd_parser::{
+    error::SourceCmdError,
+    model::{ChatMessage, ChatResponse},
+};
 
 use crate::{
-    error::SourceCmdGuiResult,
+    error::{SourceCmdGuiError, SourceCmdGuiResult},
     model::{entity::Script, state::Config},
 };
 
@@ -59,20 +65,27 @@ pub async fn process_python_command(
         locals.set_item("message", message.to_py_dict(py)?)?;
         locals.set_item("config", config.to_py_dict(py)?)?;
 
-        let py_string = PyString::new(py, &python_context.inner);
+        let serialized: String = python_context.try_into().unwrap_or("{}".to_owned());
+
+        let py_string = PyString::new(py, &serialized);
         locals.set_item("context", py_string)?;
 
         let code = code.clone()
             + r#"
-context = dict()
+ref_context = dict()
+modified_context = dict()
 
 def get_object(name):
-    return context[name]
+    global modified_context
+    global ref_context
+
+    if name in modified_context:
+        return modified_context[name]
+    
+    return ref_context[name]
 
 def set_object(name, value):
-    context[name] = value
-
-    return context
+    modified_context[name] = value
 
 def _main(locals):
     import io
@@ -81,8 +94,8 @@ def _main(locals):
     
     result = None
     
-    global context
-    context = json.loads(locals['context'])
+    global ref_context
+    ref_context = json.loads(locals['context'])
 
     from contextlib import redirect_stdout, redirect_stderr
     with io.StringIO() as new_stdout, io.StringIO() as new_stderr:
@@ -94,7 +107,7 @@ def _main(locals):
         output = new_stdout.getvalue()
         error_output = new_stderr.getvalue()
 
-    return error_output, result or None, json.dumps(context)
+    return error_output, result or None, json.dumps(modified_context)
 "#;
 
         let py_module = PyModule::from_code(py, &code, "main.py", "main")?;
@@ -115,7 +128,9 @@ def _main(locals):
     Ok(match result {
         Ok((output, context)) => (
             output.map(ChatResponse::new),
-            context.map(DynamicPythonCtx::from),
+            context
+                .map(|x| DynamicPythonCtx::try_from(x).ok())
+                .flatten(),
         ),
         Err(e) => {
             error!("Error running python command: {}", e);
@@ -129,19 +144,39 @@ pub struct DynamicPythonCtx {
     /// Transferring data between Python & Rust is tricky as it requires the same GIL
     /// So to prevent unsafe & segmentation fault code, we're going to serialize the data to json.
     /// We were going to do a hashmap, but it is tricky to Serialize the fucking PyObject.
-    inner: String,
+    inner: HashMap<String, Value>,
 }
 
 impl Default for DynamicPythonCtx {
     fn default() -> Self {
         Self {
-            inner: "{}".to_string(),
+            inner: HashMap::new(),
         }
     }
 }
 
-impl From<String> for DynamicPythonCtx {
-    fn from(value: String) -> Self {
-        Self { inner: value }
+impl TryFrom<String> for DynamicPythonCtx {
+    type Error = SourceCmdGuiError;
+
+    fn try_from(value: String) -> SourceCmdGuiResult<Self> {
+        Ok(Self {
+            inner: serde_json::from_str(&value)?,
+        })
+    }
+}
+
+impl TryInto<String> for DynamicPythonCtx {
+    type Error = SourceCmdGuiError;
+
+    fn try_into(self) -> Result<String, Self::Error> {
+        Ok(serde_json::to_string(&self.inner)?)
+    }
+}
+
+impl DynamicPythonCtx {
+    pub fn override_values(&mut self, reference: &Self) {
+        reference.inner.iter().for_each(|(key, value)| {
+            self.inner.insert(key.to_string(), value.clone());
+        });
     }
 }
