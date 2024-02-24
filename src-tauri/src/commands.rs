@@ -317,9 +317,9 @@ async fn mimic(
         return Ok(None);
     }
 
-    return Ok(Some(ChatResponse::new(
+    Ok(Some(ChatResponse::new(
         chat_message.raw_message.to_string(),
-    )));
+    )))
 }
 
 /// Handles python execution

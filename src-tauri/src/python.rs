@@ -9,10 +9,7 @@ use pyo3::{
 use serde::{Deserialize, Serialize};
 
 use serde_json::Value;
-use source_cmd_parser::{
-    error::SourceCmdError,
-    model::{ChatMessage, ChatResponse},
-};
+use source_cmd_parser::model::{ChatMessage, ChatResponse};
 
 use crate::{
     error::{SourceCmdGuiError, SourceCmdGuiResult},
@@ -128,9 +125,7 @@ def _main(locals):
     Ok(match result {
         Ok((output, context)) => (
             output.map(ChatResponse::new),
-            context
-                .map(|x| DynamicPythonCtx::try_from(x).ok())
-                .flatten(),
+            context.and_then(|x| DynamicPythonCtx::try_from(x).ok()),
         ),
         Err(e) => {
             error!("Error running python command: {}", e);
@@ -139,20 +134,12 @@ def _main(locals):
     })
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct DynamicPythonCtx {
     /// Transferring data between Python & Rust is tricky as it requires the same GIL
     /// So to prevent unsafe & segmentation fault code, we're going to serialize the data to json.
     /// We were going to do a hashmap, but it is tricky to Serialize the fucking PyObject.
     inner: HashMap<String, Value>,
-}
-
-impl Default for DynamicPythonCtx {
-    fn default() -> Self {
-        Self {
-            inner: HashMap::new(),
-        }
-    }
 }
 
 impl TryFrom<String> for DynamicPythonCtx {
