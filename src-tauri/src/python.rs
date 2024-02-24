@@ -79,7 +79,10 @@ def get_object(name):
     if name in modified_context:
         return modified_context[name]
     
-    return ref_context[name]
+    if name in ref_context:
+        return ref_context[name]
+
+    return None
 
 def set_object(name, value):
     modified_context[name] = value
